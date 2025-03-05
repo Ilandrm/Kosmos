@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="quizGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d1ff"/>
+      <stop offset="100%" stop-color="#0066cc"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="#080820" stroke="#333366" stroke-width="4"/>
+  
+  <!-- Question mark -->
+  <text x="64" y="90" font-family="Arial" font-size="90" font-weight="bold" text-anchor="middle" fill="url(#quizGrad)">?</text>
+  
+  <!-- Circles around -->
+  <circle cx="30" cy="30" r="8" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+  <circle cx="100" cy="40" r="6" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+  <circle cx="90" cy="90" r="7" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+  <circle cx="40" cy="85" r="5" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+</svg>

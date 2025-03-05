@@ -1,0 +1,63 @@
+@import './base.css';
+
+/* Styles globaux pour l'application */
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.25rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--primary-color);
+  color: var(--text-light);
+  border: none;
+  outline: none;
+  box-shadow: 0 0 15px rgba(61, 154, 255, 0.5);
+}
+
+.btn:hover {
+  box-shadow: 0 0 20px rgba(61, 154, 255, 0.7);
+  transform: translateY(-2px);
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Styles pour le futurisme */
+.neon-text {
+  text-shadow: 0 0 5px var(--primary-color), 0 0 10px var(--primary-color), 0 0 15px var(--primary-color);
+}
+
+.panel {
+  background-color: var(--background-mid);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(61, 154, 255, 0.3);
+  padding: 1.5rem;
+  box-shadow: 0 0 20px rgba(61, 154, 255, 0.2);
+}
+
+/* Animations */
+@keyframes pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+}
+
+.pulse {
+  animation: pulse 2s infinite ease-in-out;
+}

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Koesio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Orbitron', sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(45deg, #000428 0%, #140028 30%, #1B004B 70%, #002447 100%);
+            color: white;
+        }
+
+        #quiz-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .quiz-content-wrapper {
+            width: 100%;
+            padding: 20px;
+        }
+
+        .quiz-question {
+            width: 80%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .quiz-option {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            padding: 1.8rem;
+            width: 100%;
+            text-align: center;
+            background: linear-gradient(45deg, #003a66, #00588f);
+            border: 2px solid #00d1ff;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .quiz-option:hover {
+            background: #00d1ff;
+            color: black;
+        }
+
+        .victory-message {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 20, 50, 0.8);
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        h2 {
+            font-size: 3.5rem;
+            text-align: center;
+            color: #00d1ff;
+            text-shadow: 0 0 10px rgba(0, 209, 255, 0.5);
+        }
+
+        p {
+            font-size: 3rem;
+            margin-bottom: 5rem;
+            line-height: 1.4;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="quiz-container"></div>
+
+    <script>
+        const questions = [
+            {
+                question: "Où se situe le siège social de Koesio ?",
+                options: ["Paris", "Lyon", "Valence", "Grenoble"],
+                correctAnswer: 2
+            },
+            {
+                question: "Quel est le slogan actuel de Koesio ?",
+                options: [
+                    "Koesio : votre partenaire pour une transformation digitale réussie",
+                    "Koesio : des solutions innovantes pour les entreprises de toutes tailles",
+                    "Koesio : ensemble, construisons l'avenir numérique de votre entreprise",
+                    "Koesio : au cœur de votre transformation numérique"
+                ],
+                correctAnswer: 3
+            },
+            {
+                question: "En quelle année Koesio a-t-elle été fondée ?",
+                options: ["1991", "2002", "2011", "2021"],
+                correctAnswer: 0
+            },
+            {
+                question: "Quel est le rôle du centre de reconditionnement EOLE de Koesio ?",
+                options: [
+                    "Un centre de formation aux métiers du numérique",
+                    "Un centre de logistique et de reconditionnement des matériels d'impression",
+                    "Un espace de coworking et d'innovation",
+                    "Un showroom présentant les dernières technologies de l'entreprise"
+                ],
+                correctAnswer: 1
+            },
+            {
+                question: "Comment Koesio encourage-t-il la formation et le développement de ses collaborateurs ?",
+                options: [
+                    "En proposant un catalogue de formations en ligne",
+                    "En mettant en place des parcours de carrière personnalisés",
+                    "En offrant des opportunités de mobilité interne",
+                    "Toutes ces réponses"
+                ],
+                correctAnswer: 3
+            },
+            {
+                question: "Je suis la planète rouge, mais je ne suis pas en colère. Qui suis-je ?",
+                options: ["La Terre", "Saturne", "Jupiter", "Mars"],
+                correctAnswer: 3
+            },
+            {
+                question: "Koesio propose des contrats de maintenance pour ses photocopieurs. Un contrat coûte 150 € par an et par photocopieur. Si Koesio a 1500 clients et que chaque client possède en moyenne 2 photocopieurs, quel est le chiffre d'affaires potentiel de Koesio avec les contrats de maintenance ?",
+                options: ["450 000 €", "583 200 €", "600 000 €", "750 000 €"],
+                correctAnswer: 1
+            }
+        ];
+
+        let currentQuestion = 0;
+        let shuffledQuestions;
+
+        function shuffleArray(array) {
+            let currentIndex = array.length;
+            let temporaryValue, randomIndex;
+
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex -= 1;
+                temporaryValue = array[currentIndex];
+                array[currentIndex] = array[randomIndex];
+                array[randomIndex] = temporaryValue;
+            }
+
+            return array;
+        }
+
+        function startQuiz() {
+            shuffledQuestions = shuffleArray([...questions]);
+            currentQuestion = 0;
+            showQuestion();
+        }
+
+        function showQuestion() {
+            const question = shuffledQuestions[currentQuestion];
+            const quizContainer = document.getElementById('quiz-container');
+            
+            quizContainer.innerHTML = `
+                <div class="quiz-content-wrapper">
+                    <div class="quiz-question">
+                        <h2>Question ${currentQuestion + 1}/${questions.length}</h2>
+                        <p>${question.question}</p>
+                        <div class="quiz-options">
+                            ${question.options.map((option, index) => `
+                                <button class="quiz-option" onclick="checkAnswer(${index})">
+                                    ${String.fromCharCode(97 + index)}) ${option}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function checkAnswer(selectedAnswer) {
+            const question = shuffledQuestions[currentQuestion];
+            const buttons = document.querySelectorAll('.quiz-option');
+            buttons.forEach(button => button.disabled = true);
+
+            if (selectedAnswer === question.correctAnswer) {
+                buttons[selectedAnswer].style.backgroundColor = '#00ff00';
+                setTimeout(() => {
+                    currentQuestion++;
+                    if (currentQuestion < shuffledQuestions.length) {
+                        showQuestion();
+                    } else {
+                        showFinalMessage();
+                    }
+                }, 1000);
+            } else {
+                buttons[selectedAnswer].style.backgroundColor = '#ff0000';
+                buttons[question.correctAnswer].style.backgroundColor = '#00ff00';
+                setTimeout(() => {
+                    showQuestion();
+                }, 1000);
+            }
+        }
+
+        function showFinalMessage() {
+            const quizContainer = document.getElementById('quiz-container');
+            quizContainer.innerHTML = `
+                <div class="victory-message">
+                    <h2>Félicitations !</h2>
+                    <p>Vous avez terminé le quiz avec succès !</p>
+                    <button class="quiz-option" onclick="startQuiz()">Recommencer</button>
+                </div>
+            `;
+        }
+
+        // Démarrer le quiz au chargement de la page
+        window.onload = startQuiz;
+    </script>
+</body>
+</html>

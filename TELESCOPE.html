@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorateur Spatial</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Orbitron', sans-serif;
+            min-height: 100vh;
+            color: white;
+            background: 
+                radial-gradient(circle at 50% 50%, rgba(0, 41, 102, 0.3) 0%, transparent 100%),
+                radial-gradient(circle at 20% 30%, rgba(128, 0, 255, 0.4) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(0, 209, 255, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 60% 40%, rgba(238, 130, 238, 0.3) 0%, transparent 60%),
+                linear-gradient(45deg, #000428 0%, #140028 30%, #1B004B 70%, #002447 100%);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            opacity: 0;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .score-display {
+            font-size: 24px;
+            color: #00d1ff;
+            text-shadow: 0 0 10px rgba(0, 209, 255, 0.5);
+            font-weight: 700;
+            background: rgba(0, 20, 50, 0.8);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 2px solid #00d1ff;
+        }
+
+        .planet-indicator {
+            background: rgba(0, 20, 50, 0.8);
+            padding: 10px;
+            border-radius: 10px;
+            border: 2px solid #00d1ff;
+            display: flex;
+            align-items: center;
+        }
+
+        .game-button {
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(45deg, #003a66, #00588f);
+            border: 2px solid #00d1ff;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .game-button:hover {
+            background: #00d1ff;
+            color: black;
+        }
+
+        .validate-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(45deg, #003a66, #00588f);
+            border: 2px solid #00d1ff;
+            color: white;
+            padding: 0.7rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .validate-button:hover {
+            background: #00d1ff;
+            color: black;
+        }
+
+        .game-area {
+            position: relative;
+            height: 600px;
+            background-color: transparent;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .planet {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background-size: cover;
+            overflow: hidden;
+        }
+        
+        .planet::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+        }
+        
+        .planet-ring {
+            position: absolute;
+            width: 160%;
+            height: 10px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(20deg);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+            z-index: -1;
+            opacity: 0.9;
+        }
+
+        .telescope-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            z-index: 5;
+            pointer-events: none;
+        }
+        
+        .telescope-view {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background-color: transparent;
+            transform: translate(-50%, -50%);
+            z-index: 6;
+            pointer-events: none;
+            overflow: hidden;
+            box-shadow: 0 0 40px 20px rgba(0, 0, 0, 0.9) inset;
+        }
+        
+        .telescope-viewfinder {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border: 2px solid #00d1ff;
+            border-radius: 10px;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(0, 209, 255, 0.5);
+            pointer-events: none;
+            z-index: 8;
+        }
+
+        .corner {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 2px solid #00d1ff;
+            box-shadow: 0 0 10px rgba(0, 209, 255, 0.5);
+        }
+
+        .top-left {
+            top: 0;
+            left: 0;
+        }
+
+        .top-right {
+            top: 0;
+            right: 0;
+        }
+
+        .bottom-left {
+            bottom: 0;
+            left: 0;
+        }
+
+        .bottom-right {
+            bottom: 0;
+            right: 0;
+        }
+
+        .center-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            border: 2px solid #00d1ff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 209, 255, 0.5);
+        }
+
+        .game-instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 20, 50, 0.8);
+            border-radius: 10px;
+            border: 2px solid #00d1ff;
+            padding: 30px;
+            text-align: center;
+            z-index: 10;
+        }
+        
+        .feedback-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 10px;
+            z-index: 20;
+            animation: fadeInOut 1.5s forwards;
+            text-align: center;
+        }
+
+        .success {
+            background-color: rgba(0, 200, 100, 0.8);
+            border: 2px solid #00ff80;
+            color: white;
+            text-shadow: 0 0 10px rgba(0, 255, 128, 0.7);
+        }
+
+        .error {
+            background-color: rgba(200, 0, 50, 0.8);
+            border: 2px solid #ff3060;
+            color: white;
+            text-shadow: 0 0 10px rgba(255, 48, 96, 0.7);
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="stars-container"></div>
+    
+    <div class="game-container">
+        <div class="game-header">
+            <div class="score-display">Planètes: <span id="score">0</span>/<span id="total-planets">5</span></div>
+            <button id="start-button" class="game-button">Commencer</button>
+            <div id="planet-indicator" class="planet-indicator" style="display: none;">
+                <div style="margin-right: 10px;">Recherchez:</div>
+                <div id="target-color" style="width: 24px; height: 24px; border-radius: 50%;"></div>
+            </div>
+        </div>
+        
+        <div class="game-area" id="game-area">
+            <div class="telescope-overlay" id="telescope-overlay"></div>
+            <div id="telescope-view" class="telescope-view"></div>
+            <div id="telescope-viewfinder" class="telescope-viewfinder">
+                <div class="corner top-left"></div>
+                <div class="corner top-right"></div>
+                <div class="corner bottom-left"></div>
+                <div class="corner bottom-right"></div>
+                <div class="center-circle"></div>
+            </div>
+            
+            <button id="validate-button" class="validate-button" style="display: none;">Valider</button>
+            
+            <div id="game-instructions" class="game-instructions">
+                <h2>Explorateur Spatial</h2>
+                <p>Utilisez les flèches pour déplacer le télescope</p>
+                <p>Centrez une planète dans le viseur</p>
+                <p>Cliquez sur "Valider" pour vérifier votre choix</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configuration du jeu
+            const gameArea = document.getElementById('game-area');
+            const telescopeViewfinder = document.getElementById('telescope-viewfinder');
+            const scoreDisplay = document.getElementById('score');
+            const startButton = document.getElementById('start-button');
+            const gameInstructions = document.getElementById('game-instructions');
+            const planetIndicator = document.getElementById('planet-indicator');
+            const targetColorDisplay = document.getElementById('target-color');
+            const validateButton = document.getElementById('validate-button');
+            
+            let position = { x: 300, y: 300 };
+            let score = 0;
+            let planets = [];
+            let targetPlanet = null;
+            let gameStarted = false;
+            let gameAreaBounds = gameArea.getBoundingClientRect();
+            let planetsToFind = []; // Liste des planètes à trouver
+            
+            // Création des étoiles
+            function createStars() {
+                const starsContainer = document.getElementById('stars-container');
+                starsContainer.innerHTML = ''; // S'assurer que le conteneur est vide
+                const starCount = 400;
+
+                for (let i = 0; i < starCount; i++) {
+                    const star = document.createElement('div');
+                    star.classList.add('star');
+                    
+                    const size = 0.5 + Math.random() * 3;
+                    const opacity = 0.4 + Math.random() * 0.6;
+
+                    star.style.width = `${size}px`;
+                    star.style.height = `${size}px`;
+                    star.style.left = `${Math.random() * 100}%`;
+                    star.style.top = `${Math.random() * 100}%`;
+                    star.style.opacity = opacity;
+                    star.style.animationDelay = `-${Math.random() * 10}s`;
+
+                    starsContainer.appendChild(star);
+                }
+            }
+            
+            // Création des planètes
+            function createPlanets() {
+                // Supprimer les planètes existantes
+                const oldPlanets = document.querySelectorAll('.planet');
+                oldPlanets.forEach(planet => planet.remove());
+                
+                const planetColors = [
+                    { 
+                        name: 'Rouge', 
+                        color: '#ff5c5c',
+                        gradient: 'radial-gradient(circle at 30% 30%, #ff9d7d 0%, #ff4040 40%, #c22121 90%)',
+                        hasRing: true,
+                        ringColor: 'linear-gradient(90deg, rgba(255, 157, 125, 0.8), rgba(255, 100, 100, 0.9), rgba(255, 157, 125, 0.8))'
+                    },
+                    { 
+                        name: 'Bleue', 
+                        color: '#5c8fff',
+                        gradient: 'radial-gradient(circle at 30% 30%, #72e1ff 0%, #0099cc 50%, #006699 95%)',
+                        hasRing: false
+                    },
+                    { 
+                        name: 'Verte', 
+                        color: '#5cff8f',
+                        gradient: 'radial-gradient(circle at 40% 40%, #d4ff5c 0%, #66ff99 40%, #00994d 85%)',
+                        hasRing: true,
+                        ringColor: 'linear-gradient(90deg, rgba(212, 255, 92, 0.7), rgba(102, 255, 153, 0.8), rgba(212, 255, 92, 0.7))'
+                    },
+                    { 
+                        name: 'Dorée', 
+                        color: '#ffdd5c',
+                        gradient: 'radial-gradient(circle at 30% 30%, #fff3b0 0%, #ffd42a 35%, #ff8c00 90%)',
+                        hasRing: true,
+                        ringColor: 'linear-gradient(90deg, rgba(255, 214, 42, 0.7), rgba(255, 140, 0, 0.9), rgba(255, 214, 42, 0.7))'
+                    },
+                    { 
+                        name: 'Violette', 
+                        color: '#c45cff',
+                        gradient: 'radial-gradient(circle at 30% 30%, #ea80ff 0%, #cc33ff 50%, #800080 95%)',
+                        hasRing: false
+                    }
+                ];
+                
+                planets = [];
+                
+                // Fonction pour vérifier si deux planètes se chevauchent
+                function planetsOverlap(planet1, planet2) {
+                    const distance = Math.sqrt(
+                        Math.pow(planet1.x - planet2.x, 2) + 
+                        Math.pow(planet1.y - planet2.y, 2)
+                    );
+                    return distance < (planet1.size/2 + planet2.size/2 + 20); // Ajouter 20px de marge
+                }
+                
+                // Fonction pour vérifier si une position est valide pour une nouvelle planète
+                function isValidPosition(newPlanet) {
+                    for (let i = 0; i < planets.length; i++) {
+                        if (planetsOverlap(newPlanet, planets[i])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                
+                for (let i = 0; i < planetColors.length; i++) {
+                    const planetSize = 40 + Math.random() * 40; // Planètes plus grandes
+                    let planet;
+                    let attempts = 0;
+                    const maxAttempts = 50;
+                    
+                    // Essayer de trouver une position valide
+                    do {
+                        planet = {
+                            id: i,
+                            name: planetColors[i].name,
+                            color: planetColors[i].color,
+                            gradient: planetColors[i].gradient,
+                            hasRing: planetColors[i].hasRing,
+                            ringColor: planetColors[i].ringColor,
+                            size: planetSize,
+                            x: Math.random() * (gameAreaBounds.width - planetSize * 2) + planetSize,
+                            y: Math.random() * (gameAreaBounds.height - planetSize * 2) + planetSize,
+                            element: document.createElement('div')
+                        };
+                        attempts++;
+                    } while (!isValidPosition(planet) && attempts < maxAttempts);
+                    
+                    // Si on a atteint le nombre maximal de tentatives, ajuster la taille
+                    if (attempts >= maxAttempts) {
+                        planet.size = Math.max(20, planet.size * 0.8);
+                    }
+                    
+                    planet.element.className = 'planet';
+                    planet.element.style.width = `${planet.size}px`;
+                    planet.element.style.height = `${planet.size}px`;
+                    planet.element.style.background = planet.gradient;
+                    planet.element.style.left = `${planet.x}px`;
+                    planet.element.style.top = `${planet.y}px`;
+                    
+                    // Ajouter un anneau à certaines planètes
+                    if (planet.hasRing) {
+                        const ring = document.createElement('div');
+                        ring.className = 'planet-ring';
+                        ring.style.background = planet.ringColor;
+                        planet.element.appendChild(ring);
+                    }
+                    
+                    // Ajouter des détails aléatoires à la planète
+                    const randomDetails = Math.floor(Math.random() * 3);
+                    if (randomDetails === 1) {
+                        // Ajouter des taches/cratères
+                        const spots = Math.floor(Math.random() * 3) + 2;
+                        for (let j = 0; j < spots; j++) {
+                            const spot = document.createElement('div');
+                            const spotSize = planet.size * (Math.random() * 0.15 + 0.05);
+                            spot.style.position = 'absolute';
+                            spot.style.width = `${spotSize}px`;
+                            spot.style.height = `${spotSize}px`;
+                            spot.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+                            spot.style.borderRadius = '50%';
+                            spot.style.left = `${Math.random() * 80 + 10}%`;
+                            spot.style.top = `${Math.random() * 80 + 10}%`;
+                            planet.element.appendChild(spot);
+                        }
+                    } else if (randomDetails === 2) {
+                        // Ajouter un motif
+                        const pattern = document.createElement('div');
+                        pattern.style.position = 'absolute';
+                        pattern.style.width = '100%';
+                        pattern.style.height = '100%';
+                        pattern.style.backgroundImage = 'linear-gradient(rgba(255, 255, 255, 0.1) 10%, transparent 10%, transparent 20%, rgba(255, 255, 255, 0.1) 20%, rgba(255, 255, 255, 0.1) 30%, transparent 30%)';
+                        pattern.style.backgroundSize = `${planet.size * 0.2}px ${planet.size * 0.2}px`;
+                        pattern.style.opacity = '0.4';
+                        pattern.style.borderRadius = '50%';
+                        planet.element.appendChild(pattern);
+                    }
+                    
+                    gameArea.appendChild(planet.element);
+                    planets.push(planet);
+                }
+            }
+            
+            // Sélection d'une planète cible
+            function selectTargetPlanet() {
+                if (planetsToFind.length === 0) {
+                    // Si toutes les planètes ont été trouvées, afficher un message de victoire
+                    showVictoryMessage();
+                    return;
+                }
+                
+                // Sélectionner la première planète de la liste
+                targetPlanet = planetsToFind[0];
+                targetColorDisplay.style.backgroundColor = targetPlanet.color;
+                planetIndicator.style.display = 'flex';
+            }
+            
+            // Afficher un message de victoire
+            function showVictoryMessage() {
+                // Cacher le bouton de validation
+                validateButton.style.display = 'none';
+                
+                // Créer un message de victoire
+                const victoryMessage = document.createElement('div');
+                victoryMessage.className = 'game-instructions';
+                victoryMessage.style.zIndex = '30';
+                victoryMessage.innerHTML = `
+                    <h2>Mission Accomplie!</h2>
+                    <p>Félicitations! Vous avez trouvé toutes les planètes.</p>
+                    <p>Score final: ${score}</p>
+                    <button id="restart-button" class="game-button">Rejouer</button>
+                `;
+                
+                gameArea.appendChild(victoryMessage);
+                
+                // Ajouter un événement pour le bouton de redémarrage
+                document.getElementById('restart-button').addEventListener('click', () => {
+                    victoryMessage.remove();
+                    startGame();
+                });
+            }
+            
+            // Mise à jour de la position du viseur et du halo
+            function updateTelescopePosition() {
+                const telescopeView = document.getElementById('telescope-view');
+                
+                telescopeViewfinder.style.left = `${position.x}px`;
+                telescopeViewfinder.style.top = `${position.y}px`;
+                
+                // Mettre à jour également la position de la zone visible
+                telescopeView.style.left = `${position.x}px`;
+                telescopeView.style.top = `${position.y}px`;
+                
+                // Créer un masque circulaire qui permet de voir à travers l'overlay
+                // Ajustement du halo pour qu'il soit plus sombre (opacité augmentée à 0.95)
+                const maskStyle = `
+                    radial-gradient(circle at ${position.x}px ${position.y}px, 
+                    transparent 0px, 
+                    transparent 80px, 
+                    rgba(0, 0, 0, 0.95) 100px)
+                `;
+                
+                document.getElementById('telescope-overlay').style.background = maskStyle;
+            }
+            
+            // Vérification de la capture d'une planète
+            function checkPlanetCapture() {
+                // Trouver la planète la plus proche du viseur
+                let closestPlanet = null;
+                let closestDistance = Infinity;
+                
+                planets.forEach(planet => {
+                    const distance = Math.sqrt(
+                        Math.pow(position.x - planet.x, 2) + 
+                        Math.pow(position.y - planet.y, 2)
+                    );
+                    
+                    if (distance < closestDistance && distance < 75) {
+                        closestDistance = distance;
+                        closestPlanet = planet;
+                    }
+                });
+                
+                if (closestPlanet) {
+                    // Vérifier si c'est la planète cible
+                    if (closestPlanet.id === targetPlanet.id) {
+                        // Bonne planète - afficher message de succès
+                        showFeedback('SUCCESS', true);
+                        
+                        // Incrémenter le score
+                        score++;
+                        scoreDisplay.textContent = score;
+                        
+                        // Retirer la planète de la liste des planètes à trouver
+                        planetsToFind.shift();
+                        
+                        // Sélectionner une nouvelle cible
+                        selectTargetPlanet();
+                    } else {
+                        // Mauvaise planète - afficher message d'erreur
+                        showFeedback('ERROR', false);
+                    }
+                }
+            }
+            
+            // Afficher un message de feedback
+            function showFeedback(message, isSuccess) {
+                // Supprimer tout message précédent
+                const existingFeedback = document.querySelector('.feedback-message');
+                if (existingFeedback) {
+                    existingFeedback.remove();
+                }
+                
+                // Créer un nouvel élément de feedback
+                const feedback = document.createElement('div');
+                feedback.className = `feedback-message ${isSuccess ? 'success' : 'error'}`;
+                feedback.textContent = message;
+                
+                // Ajouter au DOM
+                gameArea.appendChild(feedback);
+                
+                // Supprimer après l'animation
+                setTimeout(() => {
+                    if (feedback.parentNode) {
+                        feedback.parentNode.removeChild(feedback);
+                    }
+                }, 1500);
+            }
+            
+            // Démarrage du jeu
+            function startGame() {
+                gameStarted = true;
+                score = 0;
+                scoreDisplay.textContent = score;
+                
+                // Mettre à jour les limites de la zone de jeu
+                gameAreaBounds = gameArea.getBoundingClientRect();
+                
+                // Initialiser la position du viseur
+                position = {
+                    x: gameAreaBounds.width / 2,
+                    y: gameAreaBounds.height / 2
+                };
+                
+                // Cacher le bouton de démarrage et les instructions
+                startButton.style.display = 'none';
+                gameInstructions.style.display = 'none';
+                validateButton.style.display = 'block';
+                
+                // Créer les planètes
+                createPlanets();
+                
+                // Initialiser la liste des planètes à trouver
+                planetsToFind = [...planets];
+                
+                // Mettre à jour l'affichage du total des planètes
+                document.getElementById('total-planets').textContent = planetsToFind.length;
+                
+                // Sélectionner une planète cible
+                selectTargetPlanet();
+                
+                // Mettre à jour la position du viseur
+                updateTelescopePosition();
+            }
+            
+                // Gestion des touches du clavier
+            function handleKeyDown(e) {
+                if (!gameStarted) return;
+                
+                const moveSpeed = 10;
+                
+                switch(e.key) {
+                    case 'ArrowUp':
+                        position.y = Math.max(position.y - moveSpeed, 80);
+                        break;
+                    case 'ArrowDown':
+                        position.y = Math.min(position.y + moveSpeed, gameAreaBounds.height - 80);
+                        break;
+                    case 'ArrowLeft':
+                        position.x = Math.max(position.x - moveSpeed, 80);
+                        break;
+                    case 'ArrowRight':
+                        position.x = Math.min(position.x + moveSpeed, gameAreaBounds.width - 80);
+                        break;
+                }
+                
+                updateTelescopePosition();
+            }
+            
+            // Initialisation
+            createStars();
+            updateTelescopePosition();
+            
+            // Événements
+            startButton.addEventListener('click', startGame);
+            validateButton.addEventListener('click', checkPlanetCapture);
+            document.addEventListener('keydown', handleKeyDown);
+            
+            // Gérer le redimensionnement de la fenêtre
+            window.addEventListener('resize', () => {
+                gameAreaBounds = gameArea.getBoundingClientRect();
+                updateTelescopePosition();
+            });
+        });
+    </script>
+</body>
+</html>
