@@ -1,0 +1,39 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="planetGradient" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#ef5350" />
+      <stop offset="85%" stop-color="#d32f2f" />
+      <stop offset="100%" stop-color="#b71c1c" />
+    </radialGradient>
+    <filter id="crackGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="fragment-glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Main planet body -->
+  <circle cx="100" cy="100" r="80" fill="url(#planetGradient)" stroke="#b71c1c" stroke-width="2" />
+  
+  <!-- Severe cracks -->
+  <path d="M30,100 Q50,90 60,70 Q70,50 90,40 Q110,30 130,50 Q150,70 160,90 Q170,110 150,130 Q130,150 100,140 Q70,130 50,110 Q30,90 30,100 Z" 
+        fill="none" stroke="#ffcdd2" stroke-width="2" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M30,100 Q50,90 60,70 Q70,50 90,40 Q110,30 130,50 Q150,70 160,90 Q170,110 150,130 Q130,150 100,140 Q70,130 50,110 Q30,90 30,100 Z" 
+        fill="none" stroke="#b71c1c" stroke-width="3" />
+        
+  <path d="M100,20 Q80,40 90,60 Q100,80 80,100 Q60,120 80,140 Q100,160 120,140 Q140,120 120,100 Q100,80 110,60 Q120,40 100,20 Z" 
+        fill="none" stroke="#ffcdd2" stroke-width="2" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M100,20 Q80,40 90,60 Q100,80 80,100 Q60,120 80,140 Q100,160 120,140 Q140,120 120,100 Q100,80 110,60 Q120,40 100,20 Z" 
+        fill="none" stroke="#b71c1c" stroke-width="3" />
+  
+  <!-- Fragments of planet breaking off -->
+  <path d="M145,60 Q150,50 160,55 Q170,60 165,70 Q160,80 150,75 Q140,70 145,60 Z" 
+        fill="url(#planetGradient)" stroke="#b71c1c" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M40,120 Q30,115 25,125 Q20,135 30,140 Q40,145 45,135 Q50,125 40,120 Z" 
+        fill="url(#planetGradient)" stroke="#b71c1c" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M100,30 Q90,20 85,10 Q80,0 90,5 Q100,10 105,20 Q110,30 100,30 Z" 
+        fill="url(#planetGradient)" stroke="#b71c1c" stroke-width="1" filter="url(#fragment-glow)" />
+</svg>

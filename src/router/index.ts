@@ -30,15 +30,20 @@ const router = createRouter({
       component: () => import('../games/maze-3d/Maze3DGame.vue')
     },
     {
-      path: '/games/constellation-puzzle',
-      name: 'constellation-puzzle',
-      component: () => import('../games/constellation-puzzle/ConstellationPuzzleGame.vue')
-    },
-    {
-      path: '/games/koesio-quiz',
-      name: 'koesio-quiz',
-      component: () => import('../games/koesio-quiz/KoesioQuizGame.vue')
-    }
+    path: '/games/star-collector-3d',
+    name: 'star-collector-3d',
+    component: () => import('../games/star-collector-3d/StarCollector3DGame.vue')
+  },
+  {
+    path: '/games/koesio-quiz',
+    name: 'koesio-quiz',
+    component: () => import('../games/koesio-quiz/KoesioQuizGame.vue')
+  },
+  {
+    path: '/games/space-hangman',
+    name: 'space-hangman',
+    component: () => import('../games/space-hangman/SpaceHangmanGame.vue')
+  }
   ]
 })
 

@@ -12,11 +12,20 @@
           <p>Utilisez les touches fléchées pour déplacer votre vaisseau.</p>
           <p>Naviguez à travers le labyrinthe pour atteindre la planète violette!</p>
         </div>
+        <h1>Menu Principal</h1>
+        <router-link to="/space-hangman">Pendu Spatial</router-link>
       </div>
       
       <div v-if="gameState === 'victory'" class="victory">
         <h1>VICTOIRE!</h1>
         <p>Vous avez atteint la planète en {{ formattedTime }}!</p>
+        <button @click="restartGame" class="restart-btn">REJOUER</button>
+        <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
+      </div>
+      
+      <div v-if="gameState === 'game-over'" class="game-over">
+        <h1>FIN DU JEU!</h1>
+        <p>Vous n'avez pas atteint la planète dans le temps imparti.</p>
         <button @click="restartGame" class="restart-btn">REJOUER</button>
         <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
       </div>
@@ -39,7 +48,7 @@ export default defineComponent({
   name: 'Maze3DGame',
   setup() {
     // État du jeu
-    const gameState = ref('menu'); // 'menu', 'playing', 'victory'
+    const gameState = ref('menu'); // 'menu', 'playing', 'victory', 'game-over'
     const gameTime = ref(0);
     const gameTimer = ref<number | null>(null);
     
@@ -330,7 +339,7 @@ export default defineComponent({
       });
       
       // Créer le vaisseau à partir de la classe Ship3D
-      ship = new Ship3D(scene, mazeWalls);
+      ship = new Ship3D(scene, mazeWalls, camera);
       
       // Positionner le vaisseau au point de départ
       ship.position = shipStartPosition.clone();
@@ -485,6 +494,15 @@ export default defineComponent({
       
       // Démarrer la boucle d'animation
       animate();
+      
+      // Définir un timer pour terminer le jeu après 30 secondes
+      let gameTimerId = setTimeout(() => {
+        endGame();
+      }, 30000);
+      
+      onBeforeUnmount(() => {
+        clearTimeout(gameTimerId);
+      });
     }
     
     function restartGame() {
@@ -536,7 +554,7 @@ export default defineComponent({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       
-      gameState.value = 'victory';
+      gameState.value = 'game-over';
     }
     
     // Gestionnaires d'événements
@@ -778,7 +796,7 @@ export default defineComponent({
   z-index: 10;
 }
 
-.menu, .victory {
+.menu, .victory, .game-over {
   background: rgba(0, 20, 40, 0.8);
   border: 2px solid #00d1ff;
   border-radius: 10px;

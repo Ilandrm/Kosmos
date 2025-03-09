@@ -18,12 +18,26 @@ interface Planet {
 }
 
 /**
+ * Représente un bonus dans le jeu
+ */
+interface Bonus {
+  id: number;
+  name: string;
+  color: string;
+  size: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
  * Moteur de jeu pour le jeu Telescope
  */
 export default class GameEngine {
   private gameArea: HTMLElement;
   private gameAreaBounds: DOMRect;
   private planets: Planet[] = [];
+  private bonuses: Bonus[] = [];
   private isRunning: boolean = false;
   private animationFrameId: number = 0;
   private lastTime: number = 0;
@@ -95,6 +109,7 @@ export default class GameEngine {
     this.isRunning = true;
     this.gameAreaBounds = this.gameArea.getBoundingClientRect();
     this.createPlanets();
+    this.spawnRandomBonus(); // Spawn a bonus at the start
     this.lastTime = performance.now();
     this.animate();
   }
@@ -121,7 +136,8 @@ export default class GameEngine {
     
     // Mettre à jour les planètes
     this.updatePlanets(deltaTime);
-    
+    this.updateBonuses(deltaTime); // Ajout de la mise à jour des bonus
+
     // Appeler les callbacks
     this.onPlanetsUpdate(this.planets);
     this.onTelescopeUpdate();
@@ -191,6 +207,23 @@ export default class GameEngine {
   }
   
   /**
+   * Fait spawn un bonus aléatoire
+   */
+  private spawnRandomBonus(): void {
+    const bonusSize = 20 + Math.random() * 20; // Taille aléatoire du bonus
+    const bonus: Bonus = {
+      id: this.bonuses.length,
+      name: 'Bonus',
+      color: '#FFD700', // Couleur dorée
+      size: bonusSize,
+      x: Math.random() * (this.gameAreaBounds.width - bonusSize * 2) + bonusSize,
+      y: Math.random() * (this.gameAreaBounds.height - bonusSize * 2) + bonusSize,
+      z: 0 // Position Z pour que le bonus soit visible dès le départ
+    };
+    this.bonuses.push(bonus);
+  }
+  
+  /**
    * Met à jour l'état des planètes
    * @param deltaTime Temps écoulé depuis la dernière mise à jour (en secondes)
    */
@@ -206,6 +239,24 @@ export default class GameEngine {
         } else if (planet.rotation < 0) {
           planet.rotation += Math.PI * 2;
         }
+      }
+    }
+  }
+  
+  /**
+   * Met à jour l'état des bonus
+   * @param deltaTime Temps écoulé depuis la dernière mise à jour (en secondes)
+   */
+  private updateBonuses(deltaTime: number): void {
+    console.log('Updating bonuses...'); // Log to check if the method is called
+    for (const bonus of this.bonuses) {
+      // Move bonuses towards the player along the Z-axis
+      bonus.z += 6 * deltaTime; // Assuming a speed of 6, similar to planets
+      console.log(`Bonus ID: ${bonus.id}, Position Z: ${bonus.z}`); // Log the position of each bonus
+
+      // Check if the bonus is out of bounds and remove it if necessary
+      if (bonus.z > this.gameAreaBounds.height) {
+        this.bonuses = this.bonuses.filter(b => b !== bonus);
       }
     }
   }

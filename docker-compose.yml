@@ -10,8 +10,8 @@ services:
       - "8080:80"
     restart: unless-stopped
     # Volumes optionnels pour le développement
-    # volumes:
-    #   - ./src:/app/src
+    volumes:
+      - ./src:/app/src
 
   # Service de développement optionnel
   # Service de développement - commentez les lignes ci-dessous si vous ne voulez pas l'utiliser

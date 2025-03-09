@@ -34,25 +34,37 @@ export default class Ship3D extends GameObject3D {
   // Liste des objets du labyrinthe avec lesquels vérifier les collisions
   private collisionObjects: THREE.Object3D[] = [];
   
-  constructor(scene: THREE.Scene, collisionObjects: THREE.Object3D[] = []) {
-    // Créer un groupe temporaire pour le vaisseau en attendant le chargement du modèle
+  private camera: THREE.Camera;
+
+  constructor(scene: THREE.Scene, collisionObjects: THREE.Object3D[] = [], camera: THREE.Camera) {
     const shipGroup = new THREE.Group();
-    
     super(scene, shipGroup);
-    
-    // Définir le rayon de collision et la position initiale
-    this.boundingRadius = 1.2; // Augmentation du rayon de collision
-    this.rayLength = 1.5; // Augmentation de la longueur des rayons de détection
-    this.position = new THREE.Vector3(0, 1, 0);
-    
-    // Enregistrer les objets pour la détection de collision
-    this.collisionObjects = collisionObjects;
-    
-    // Initialiser les rayons de détection de collision
+    this.boundingRadius = 1.5;
+    this.position = new THREE.Vector3(0, -8, 0);
+    this.targetX = null;
+    this.targetY = null;
+    this.velocity = new THREE.Vector3(0, 0, 0);
+    this.inputState = {
+      moveLeft: false,
+      moveRight: false,
+      moveUp: false,
+      moveDown: false
+    };
+    console.log('Initialisation du vaisseau : création du vaisseau de secours');
+    this.createFallbackShip();
+    this.modelLoaded = true;
+    this.loadShipModel();
+    this.initThrusterParticles();
     this.initCollisionDetection();
     
-    // Charger le modèle GLB
-    this.loadShipModel();
+    // Ajout des objets de collision
+    this.collisionObjects = collisionObjects;
+    
+    this.camera = camera;
+    
+    console.log('Initialisation du vaisseau : configuration des écouteurs d\'événements');
+    this.setupEventListeners();
+    console.log('Initialisation du vaisseau : écouteurs d\'événements configurés');
   }
   
   /**
@@ -61,55 +73,78 @@ export default class Ship3D extends GameObject3D {
   private loadShipModel(): void {
     const loader = new GLTFLoader();
     
-    // Charger le modèle
     loader.load(
-      // URL du modèle
       '/textures/Créer_un_vaisseau_sp_0305092734_texture.glb',
-      
-      // Callback appelé lorsque le modèle est chargé
       (gltf) => {
-        // Déterminer l'échelle et l'orientation appropriées pour le modèle
         const model = gltf.scene;
-        
-        // Ajuster la taille du modèle
-        model.scale.set(2.0, 2.0, 2.0);
-        
-        // Ajuster la rotation pour que le vaisseau pointe dans la bonne direction
-        model.rotation.y = Math.PI; // Tourner de 180 degrés
-        
-        // Parcourir tous les maillages pour configurer correctement les matériaux
+        model.scale.set(2.0, 2.0, 2.0); // Augmenter la taille du vaisseau
+        model.rotation.y = Math.PI;
+        model.rotation.z = 0;
+        model.position.z = 0;
         model.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            // Activer les ombres
-            child.castShadow = true;
-            child.receiveShadow = true;
-            
-            // S'assurer que le maillage utilise correctement la profondeur
+            child.castShadow = false;
+            child.receiveShadow = false;
             if (child.material) {
+              if (child.material.map) {
+                child.material.map.anisotropy = 1;
+                child.material.map.minFilter = THREE.LinearFilter;
+              }
+              if (child.material.envMap) child.material.envMap = null;
+              if (child.material instanceof THREE.MeshStandardMaterial) {
+                child.material.emissive = new THREE.Color(0x333344);
+                child.material.emissiveIntensity = 0.4;
+                child.material.metalness = 0.5;
+                child.material.roughness = 0.4;
+                if (!child.material.color.equals(new THREE.Color(0xffffff))) {
+                  child.material.color.r = Math.min(1, child.material.color.r * 1.2);
+                  child.material.color.g = Math.min(1, child.material.color.g * 1.2);
+                  child.material.color.b = Math.min(1, child.material.color.b * 1.2);
+                }
+              }
               child.material.depthWrite = true;
               child.material.depthTest = true;
             }
           }
         });
-        
-        // Remplacer le groupe temporaire par le modèle chargé
-        this.mesh.clear(); // Supprimer le contenu actuel
-        this.mesh.add(model); // Ajouter le modèle GLB
-        
-        console.log("Modèle de vaisseau chargé avec succès");
+        this.mesh.clear();
+        this.mesh.add(model);
+        console.log('Modèle du vaisseau chargé avec succès');
+
+        // Recalculer la boîte de collision après le modèle est chargé
+        this.boundingBox = new THREE.Box3().setFromObject(this.mesh);
+
+        // Trouver la dimension maximale pour créer un cube
+        const size = new THREE.Vector3();
+        this.boundingBox.getSize(size);
+        const maxDimension = Math.max(size.x, size.y, size.z);
+
+        // Créer un cube centré sur le modèle
+        const center = new THREE.Vector3();
+        this.boundingBox.getCenter(center);
+        this.boundingBox = new THREE.Box3(
+          new THREE.Vector3(
+            center.x - maxDimension / 2, 
+            center.y - maxDimension / 2, 
+            center.z - maxDimension / 2
+          ),
+          new THREE.Vector3(
+            center.x + maxDimension / 2, 
+            center.y + maxDimension / 2, 
+            center.z + maxDimension / 2
+          )
+        );
+
+        // Mettre à jour le rayon de collision
+        this.boundingRadius = maxDimension / 2;
       },
-      
-      // Callback de progression (optionnel)
       (xhr) => {
-        const percentComplete = (xhr.loaded / xhr.total) * 100;
-        console.log('Chargement du modèle de vaisseau: ' + Math.round(percentComplete) + '%');
+        console.log(`${(xhr.loaded / xhr.total * 100)}% chargé`);
       },
-      
-      // Callback d'erreur
       (error) => {
         console.error('Erreur lors du chargement du modèle:', error);
-        // Créer un vaisseau de secours en cas d'échec du chargement
         this.createFallbackShip();
+        this.modelLoaded = true;
       }
     );
   }
@@ -169,34 +204,25 @@ export default class Ship3D extends GameObject3D {
    * Initialise la détection de collision avec rayons
    */
   private initCollisionDetection(): void {
-    // Définir les directions des rayons pour la détection de collision
-    // Inverser avant/arrière pour correspondre aux contrôles corrigés
+    // Initialize ray directions for collision detection
     this.rayDirections = [
-      new THREE.Vector3(0, 0, -1),   // avant (inversé)
-      new THREE.Vector3(0, 0, 1),    // arrière (inversé)
-      new THREE.Vector3(1, 0, 0),    // droite
-      new THREE.Vector3(-1, 0, 0),   // gauche
-      new THREE.Vector3(0, 1, 0),    // haut
-      new THREE.Vector3(0, -1, 0)    // bas
+        new THREE.Vector3(0, 0, -1), // Front
+        new THREE.Vector3(0, 0, 1),  // Back
+        new THREE.Vector3(1, 0, 0),  // Right
+        new THREE.Vector3(-1, 0, 0), // Left
+        new THREE.Vector3(0, 1, 0),  // Up
+        new THREE.Vector3(0, -1, 0)  // Down
     ];
-    
-    // Créer les rayons de collision
-    for (let i = 0; i < this.rayDirections.length; i++) {
-      const raycaster = new THREE.Raycaster();
-      this.collisionRays.push(raycaster);
-      
-      if (this.showDebugRays) {
-        // Créer des flèches de visualisation pour le débogage
-        const arrowHelper = new THREE.ArrowHelper(
-          this.rayDirections[i].clone().normalize(),
-          this.position,
-          this.rayLength,
-          0xff0000
-        );
-        this.scene.add(arrowHelper);
-        this.collisionHelpers.push(arrowHelper);
-      }
+
+    // Ensure collision rays are initialized
+    this.collisionRays = [];
+    for (let direction of this.rayDirections) {
+        const raycaster = new THREE.Raycaster();
+        this.collisionRays.push(raycaster);
     }
+
+    // Debugging: Log the initialized ray directions
+    console.log('Initialized ray directions:', this.rayDirections);
   }
   
   /**
@@ -204,47 +230,44 @@ export default class Ship3D extends GameObject3D {
    * @returns Un tableau de booléens indiquant s'il y a collision dans chaque direction
    */
   private checkCollisions(): void {
-    // Noms des directions correspondant aux indices du tableau rayDirections
-    // Ces indices doivent correspondre à l'ordre des rayDirections définis dans initCollisionDetection
-    const directions = ['front', 'back', 'right', 'left', 'up', 'down'];
-    
     // Réinitialiser l'état des collisions
-    this.collisionState.front = false;
-    this.collisionState.back = false;
-    this.collisionState.left = false;
-    this.collisionState.right = false;
-    this.collisionState.up = false;
-    this.collisionState.down = false;
-    
-    // Vérifier les collisions dans chaque direction
-    for (let i = 0; i < this.collisionRays.length; i++) {
-      // Mettre à jour la position et la direction du rayon
-      this.collisionRays[i].set(
-        this.position, 
-        this.rayDirections[i].clone().normalize()
-      );
-      
-      // Mettre à jour la visualisation des rayons si activée
-      if (this.showDebugRays && this.collisionHelpers[i]) {
-        this.collisionHelpers[i].position.copy(this.position);
-        this.collisionHelpers[i].setDirection(this.rayDirections[i].clone().normalize());
-      }
-      
-      // Détecter les intersections
-      const intersects = this.collisionRays[i].intersectObjects(this.collisionObjects, true);
-      
-      // S'il y a une intersection proche
-      if (intersects.length > 0 && intersects[0].distance < this.rayLength) {
-        // Marquer cette direction comme ayant une collision
-        this.collisionState[directions[i] as keyof typeof this.collisionState] = true;
+    for (const key in this.collisionState) {
+      this.collisionState[key] = false;
+    }
+
+    // Si aucun objet de collision n'est défini, sortir de la fonction
+    if (this.collisionObjects.length === 0) {
+      return;
+    }
+
+    // Créer une sphère de collision autour du vaisseau
+    const shipSphere = new THREE.Sphere(this.position, this.boundingRadius);
+
+    // Vérifier la collision avec chaque objet du labyrinthe
+    for (const object of this.collisionObjects) {
+      if (object instanceof THREE.Mesh) {
+        // Créer une boîte de collision pour l'objet
+        const objectBox = new THREE.Box3().setFromObject(object);
         
-        // Changer la couleur du rayon en rouge si visualisation activée
-        if (this.showDebugRays && this.collisionHelpers[i]) {
-          this.collisionHelpers[i].setColor(new THREE.Color(0xff0000));
+        // Vérifier si la sphère du vaisseau intersecte la boîte de l'objet
+        if (objectBox.intersectsSphere(shipSphere)) {
+          // Déterminer la direction de la collision
+          const objectCenter = new THREE.Vector3();
+          objectBox.getCenter(objectCenter);
+          
+          const direction = new THREE.Vector3().subVectors(this.position, objectCenter).normalize();
+          
+          if (Math.abs(direction.x) > Math.abs(direction.z)) {
+            if (direction.x > 0) this.collisionState.left = true;
+            else this.collisionState.right = true;
+          } else {
+            if (direction.z > 0) this.collisionState.back = true;
+            else this.collisionState.front = true;
+          }
+          
+          if (direction.y > 0) this.collisionState.down = true;
+          else this.collisionState.up = true;
         }
-      } else if (this.showDebugRays && this.collisionHelpers[i]) {
-        // Remettre la couleur du rayon en vert s'il n'y a pas de collision
-        this.collisionHelpers[i].setColor(new THREE.Color(0x00ff00));
       }
     }
   }
@@ -409,33 +432,31 @@ export default class Ship3D extends GameObject3D {
       this.position.copy(previousPosition);
     }
     
-    // Appliquer une légère rotation en fonction du mouvement pour un effet visuel
+    this.handleRotation(deltaTime);
+    this.handleMovement(deltaTime);
+    this.updateCameraOrientation();
+  }
+  
+  private handleRotation(deltaTime: number): void {
+    // Rotation du vaisseau
+  }
+  
+  private handleMovement(deltaTime: number): void {
+    // Pivoter uniquement vers la direction de mouvement
     if (this.inputState.moveLeft) {
-      this.mesh.rotation.z = Math.min(this.mesh.rotation.z + 0.1, 0.3);
+      this.mesh.rotation.y = Math.PI / 2; // Faire face à gauche
     } else if (this.inputState.moveRight) {
-      this.mesh.rotation.z = Math.max(this.mesh.rotation.z - 0.1, -0.3);
-    } else {
-      // Retour progressif à la rotation neutre
-      if (this.mesh.rotation.z > 0) {
-        this.mesh.rotation.z = Math.max(this.mesh.rotation.z - 0.05, 0);
-      } else if (this.mesh.rotation.z < 0) {
-        this.mesh.rotation.z = Math.min(this.mesh.rotation.z + 0.05, 0);
-      }
-    }
-    
-    // Rotation en fonction du mouvement avant/arrière
-    if (this.inputState.moveForward) {
-      this.mesh.rotation.x = Math.min(this.mesh.rotation.x + 0.1, 0.2);
+      this.mesh.rotation.y = -Math.PI / 2; // Faire face à droite
+    } else if (this.inputState.moveForward) {
+      this.mesh.rotation.y = 0; // Faire face à l'avant
     } else if (this.inputState.moveBackward) {
-      this.mesh.rotation.x = Math.max(this.mesh.rotation.x - 0.1, -0.2);
-    } else {
-      // Retour progressif à la rotation neutre
-      if (this.mesh.rotation.x > 0) {
-        this.mesh.rotation.x = Math.max(this.mesh.rotation.x - 0.05, 0);
-      } else if (this.mesh.rotation.x < 0) {
-        this.mesh.rotation.x = Math.min(this.mesh.rotation.x + 0.05, 0);
-      }
+      this.mesh.rotation.y = Math.PI; // Faire face à l'arrière
     }
+  }
+  
+  private updateCameraOrientation(): void {
+    // Copier la rotation du vaisseau à la caméra
+    this.camera.quaternion.copy(this.mesh.quaternion);
   }
   
   /**
@@ -443,5 +464,28 @@ export default class Ship3D extends GameObject3D {
    */
   getShipMesh(): THREE.Object3D {
     return this.mesh;
+  }
+  
+  private initThrusterParticles(): void {
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
+    
+    // Créer un tableau de particules
+    const particles = new Float32Array(1000 * 3); // 1000 particules, 3 coordonnées par particule
+    for (let i = 0; i < particles.length; i++) {
+      particles[i] = Math.random() * 2 - 1; // Valeurs aléatoires pour les coordonnées
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particles, 3));
+    
+    const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+    this.mesh.add(particleSystem); // Ajouter le système de particules au vaisseau
+  }
+  
+  private setupEventListeners(): void {
+    // On ajoute des écouteurs d'événements seulement sur la fenêtre pour éviter les duplications
+    window.addEventListener('keydown', this.handleKeyDown.bind(this));
+    window.addEventListener('keyup', this.handleKeyUp.bind(this));
+    console.log('Écouteurs d\'événements configurés pour le vaisseau');
   }
 }

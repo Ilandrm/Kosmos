@@ -40,20 +40,21 @@
           <RouterLink to="/games/maze-3d" class="btn play-btn btn-3d maze-btn">Naviguer</RouterLink>
         </div>
         
-        <!-- Puzzle des Constellations -->
-        <div class="game-card panel constellation-game">
-          <h2>Puzzle des Constellations</h2>
-          <p>Reconstituez les constellations en connectant les étoiles dans le bon ordre pour révéler des motifs célestes.</p>
-          <div class="duration">Sans limite</div>
-          <RouterLink to="/games/constellation-puzzle" class="btn play-btn constellation-btn">Connecter</RouterLink>
-        </div>
-        
+      
         <!-- Quiz Koesio -->
         <div class="game-card panel quiz-game">
           <h2>Quiz Koesio</h2>
           <p>Testez vos connaissances sur Koesio et l'espace dans ce quiz interactif aux questions variées.</p>
           <div class="duration">Sans limite</div>
           <RouterLink to="/games/koesio-quiz" class="btn play-btn quiz-btn">Répondre</RouterLink>
+        </div>
+        
+        <!-- Lien vers le jeu Pendu Spatial -->
+        <div class="game-card panel">
+          <h2>Pendu Spatial</h2>
+          <p>Devinez les mots liés à l'espace pour gagner!</p>
+          <div class="duration">Sans limite</div>
+          <RouterLink to="/games/space-hangman" class="btn play-btn">Jouer au Pendu Spatial</RouterLink>
         </div>
       </div>
     </div>
@@ -221,10 +222,10 @@ import { RouterLink } from 'vue-router'
   box-shadow: 0 0 15px rgba(0, 209, 255, 0.4);
 }
 
-.constellation-game {
-  background: linear-gradient(135deg, #0a0a28, #14144b, #1a1a6c);
-  border: 1px solid #AAAAFF;
-  box-shadow: 0 0 15px rgba(170, 170, 255, 0.4);
+.star-collector-game {
+  background: linear-gradient(135deg, #2a0a28, #5a0d44, #8a1a62);
+  border: 1px solid #ff6eb4;
+  box-shadow: 0 0 15px rgba(255, 110, 180, 0.6);
 }
 
 .quiz-game {

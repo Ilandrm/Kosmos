@@ -1,0 +1,34 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="planetGradient" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#64b5f6" />
+      <stop offset="85%" stop-color="#1976d2" />
+      <stop offset="100%" stop-color="#0d47a1" />
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="crackGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Main planet body -->
+  <circle cx="100" cy="100" r="80" fill="url(#planetGradient)" stroke="#0d47a1" stroke-width="2" />
+  
+  <!-- Surface details -->
+  <ellipse cx="70" cy="70" rx="25" ry="20" fill="#2196f3" opacity="0.5" />
+  <ellipse cx="130" cy="110" rx="30" ry="22" fill="#2196f3" opacity="0.4" />
+  <circle cx="50" cy="120" r="15" fill="#2196f3" opacity="0.3" />
+  
+  <!-- Crack -->
+  <path d="M120,50 Q130,70 125,85 Q120,100 130,110 Q140,120 135,130" 
+        fill="none" stroke="#b3e5fc" stroke-width="1" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M120,50 Q130,70 125,85 Q120,100 130,110 Q140,120 135,130" 
+        fill="none" stroke="#1565c0" stroke-width="2" />
+  
+  <!-- Highlight -->
+  <circle cx="70" cy="70" r="10" fill="white" opacity="0.2" filter="url(#glow)" />
+</svg>

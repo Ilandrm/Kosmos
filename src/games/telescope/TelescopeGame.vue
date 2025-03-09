@@ -26,6 +26,7 @@
         <p>Félicitations! Vous avez trouvé toutes les planètes.</p>
         <p>Score final: {{ score }}</p>
         <button class="game-button" @click="startGame">Rejouer</button>
+        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
       
       <!-- Planètes (générées dynamiquement) -->
@@ -76,8 +77,9 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, ref } from 'vue';
 import GameEngine from './GameEngine';
+import GameFlowService from '../../services/GameFlowService';
 
 export default defineComponent({
   name: 'TelescopeGame',
@@ -96,7 +98,8 @@ export default defineComponent({
       feedbackVisible: false,
       feedbackMessage: '',
       feedbackSuccess: false,
-      victoryMessageVisible: false
+      victoryMessageVisible: false,
+      gameTimer: ref<number | null>(null)
     };
   },
   
@@ -138,6 +141,11 @@ export default defineComponent({
     if (this.gameEngine) {
       this.gameEngine.stop();
     }
+    
+    // Annuler le timer de jeu
+    if (this.gameTimer.value) {
+      clearTimeout(this.gameTimer.value);
+    }
   },
   
   methods: {
@@ -159,6 +167,11 @@ export default defineComponent({
       if (this.gameEngine) {
         this.gameEngine.start();
       }
+      
+      // Démarer le timer de jeu
+      this.gameTimer.value = setTimeout(() => {
+        this.endGame();
+      }, 30000);
     },
     
     updatePlanets(planets: any[]) {
@@ -327,6 +340,19 @@ export default defineComponent({
         this.gameAreaBounds = this.gameArea.getBoundingClientRect();
         this.updateTelescopePosition();
       }
+    },
+    
+    endGame() {
+      this.gameStarted = false;
+      this.victoryMessageVisible = true;
+      this.feedbackMessage = 'Temps écoulé!';
+      this.feedbackVisible = true;
+      this.feedbackSuccess = false;
+    },
+    
+    continueToNextGame() {
+      const nextGame = GameFlowService.getNextGame('telescope');
+      this.$router.push({ name: nextGame });
     }
   }
 });
@@ -567,6 +593,23 @@ export default defineComponent({
 .feedback-message.error {
   background-color: rgba(200, 0, 0, 0.8);
   color: white;
+}
+
+.continue-btn {
+  font-family: 'Orbitron', sans-serif;
+  background: linear-gradient(45deg, #003a66, #00588f);
+  border: 2px solid #00d1ff;
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.3s;
+}
+
+.continue-btn:hover {
+  background: #00d1ff;
+  color: black;
 }
 
 @keyframes fadeInOut {

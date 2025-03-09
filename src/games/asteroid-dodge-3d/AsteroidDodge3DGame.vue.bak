@@ -35,7 +35,6 @@
         
         <button @click="restartGame" class="restart-btn">PLAY AGAIN</button>
         <button @click="returnToMenu" class="menu-btn">MAIN MENU</button>
-        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
       
       <div v-if="gameState === 'high-scores'" class="high-scores">
@@ -74,8 +73,6 @@
 import { defineComponent, ref, onMounted, onUnmounted, watch } from 'vue';
 import GameEngine3D from './GameEngine3D';
 import ScoreManager from './ScoreManager'; // Utiliser le nouveau ScoreManager
-import { useRouter } from 'vue-router';
-import GameFlowService from '../../services/GameFlowService';
 
 export default defineComponent({
   name: 'AsteroidDodge3DGame',
@@ -97,13 +94,10 @@ export default defineComponent({
     
     let gameEngine: GameEngine3D | null = null;
     const scoreManager = new ScoreManager();
-    const router = useRouter();
     
     // Callbacks du moteur de jeu
     const scoreUpdated = (score: number) => {
       currentScore.value = score;
-      // Mettre à jour le ScoreManager directement pour plus de fiabilité
-      scoreManager.updateCurrentScore(score);
     };
     
     const timeUpdated = (time: number) => {
@@ -117,9 +111,6 @@ export default defineComponent({
     const gameOver = (score: number) => {
       finalScore.value = score;
       gameState.value = 'game-over';
-      
-      // S'assurer que le score final est correctement enregistré dans le ScoreManager
-      scoreManager.updateCurrentScore(score);
       
       // Vérifier si c'est un meilleur score
       isHighScore.value = scoreManager.isHighScore(score);
@@ -136,8 +127,7 @@ export default defineComponent({
           scoreUpdated,
           timeUpdated,
           livesUpdated,
-          gameOver,
-          scoreManager // Passage du ScoreManager au moteur de jeu
+          gameOver
         );
       }
     };
@@ -233,11 +223,6 @@ export default defineComponent({
         scoreManager.addHighScore(playerName.value.trim());
         showHighScores();
       }
-    };
-    
-    const continueToNextGame = () => {
-      const nextGame = GameFlowService.getNextGame('asteroid-dodge');
-      router.push({ name: nextGame });
     };
     
     // Gestion des touches du clavier (uniquement pour Escape/Pause)
@@ -386,7 +371,6 @@ export default defineComponent({
         x: worldX,
         y: worldY
       };
-    };
     
     // Vérifie si le point touché est sur le vaisseau
     const isTouchOnShip = (touchX: number, touchY: number, rect: DOMRect): boolean => {
@@ -552,11 +536,6 @@ export default defineComponent({
         gameContainer.value.addEventListener('touchcancel', handleTouchEnd);
       }
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      let gameTimer;
-      gameTimer = setTimeout(() => {
-        endGame();
-      }, 30000);
     });
     
     onUnmounted(() => {
@@ -580,8 +559,6 @@ export default defineComponent({
       if (gameEngine) {
         gameEngine.dispose();
       }
-      
-      clearTimeout(gameTimer);
     });
     
     // Surveiller les changements d'état pour effectuer des actions supplémentaires
@@ -590,11 +567,6 @@ export default defineComponent({
         // Animations ou sons pour la fin de jeu pourraient être ajoutés ici
       }
     });
-    
-    function endGame() {
-      gameState.value = 'game-over';
-      // Optionally call continueToNextGame() here
-    }
     
     return {
       gameContainer,
@@ -613,8 +585,7 @@ export default defineComponent({
       restartGame,
       returnToMenu,
       showHighScores,
-      saveHighScore,
-      continueToNextGame
+      saveHighScore
     };
   }
 });

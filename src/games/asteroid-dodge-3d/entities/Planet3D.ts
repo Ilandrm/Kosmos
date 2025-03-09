@@ -36,58 +36,58 @@ export default class Planet3D extends GameObject3D {
     rotationSpeed: number
   }> = {
     [PlanetType.EARTH]: {
-      radius: 1.5,
+      radius: 3.2,  // Taille augmentée pour être plus visible
       points: 20,
       color: 0xffffff,  // La couleur sera fournie par la texture
-      emissiveColor: 0x112233,
-      emissiveIntensity: 0.1,
+      emissiveColor: 0x1144aa,
+      emissiveIntensity: 0.3,
       hasAtmosphere: true,
       atmosphereColor: 0x6ca6ff,
-      atmosphereOpacity: 0.2,
+      atmosphereOpacity: 0.35,
       rotationSpeed: 0.2
     },
     [PlanetType.MARS]: {
-      radius: 1.2,
+      radius: 2.8,  // Taille augmentée pour être plus visible
       points: 15,
       color: 0xffffff,
-      emissiveColor: 0x331100,
-      emissiveIntensity: 0.05,
+      emissiveColor: 0x553311,
+      emissiveIntensity: 0.25,
       hasAtmosphere: true,
       atmosphereColor: 0xffaa88,
-      atmosphereOpacity: 0.1,
+      atmosphereOpacity: 0.25,
       rotationSpeed: 0.18
     },
     [PlanetType.VENUS]: {
       radius: 1.4,
       points: 25,
       color: 0xffffff,
-      emissiveColor: 0x553311,
-      emissiveIntensity: 0.15,
+      emissiveColor: 0x775533,
+      emissiveIntensity: 0.35,
       hasAtmosphere: true,
       atmosphereColor: 0xffe0a0,
-      atmosphereOpacity: 0.4,
+      atmosphereOpacity: 0.55,
       rotationSpeed: 0.1
     },
     [PlanetType.JUPITER]: {
       radius: 2.5,
       points: 50,
       color: 0xffffff,
-      emissiveColor: 0x553300,
-      emissiveIntensity: 0.08,
+      emissiveColor: 0x774411,
+      emissiveIntensity: 0.28,
       hasAtmosphere: true,
       atmosphereColor: 0xffcc88,
-      atmosphereOpacity: 0.15,
+      atmosphereOpacity: 0.3,
       rotationSpeed: 0.4
     },
     [PlanetType.NEPTUNE]: {
       radius: 2.0,
       points: 35,
       color: 0xffffff,
-      emissiveColor: 0x113355,
-      emissiveIntensity: 0.2,
+      emissiveColor: 0x114477,
+      emissiveIntensity: 0.4,
       hasAtmosphere: true,
       atmosphereColor: 0x88aaff,
-      atmosphereOpacity: 0.3,
+      atmosphereOpacity: 0.45,
       rotationSpeed: 0.3
     }
   };
@@ -178,9 +178,9 @@ export default class Planet3D extends GameObject3D {
         planetTexture = this.textures.earth;
     }
     
-    // Géométrie sphérique pour la planète avec plus de segments pour éviter les artefacts
-    // 32 segments en largeur et hauteur pour une bonne qualité
-    const geometry = new THREE.SphereGeometry(props.radius, 32, 32);
+    // Géométrie sphérique pour la planète avec moins de segments pour améliorer les performances
+    // 16 segments en largeur et hauteur, compromis entre performance et qualité
+    const geometry = new THREE.SphereGeometry(props.radius, 16, 16);
     
     // Matériau avec la texture de la planète
     const material = new THREE.MeshStandardMaterial({
@@ -201,32 +201,47 @@ export default class Planet3D extends GameObject3D {
     
     // Ajouter une atmosphère si la planète en a une
     if (props.hasAtmosphere) {
-      // L'atmosphère est une sphère légèrement plus grande que la planète
-      const atmosphereGeometry = new THREE.SphereGeometry(props.radius * 1.05, 32, 32);
+      // L'atmosphère est une sphère légèrement plus grande que la planète, avec moins de segments
+      const atmosphereGeometry = new THREE.SphereGeometry(props.radius * 1.1, 12, 12);
       const atmosphereMaterial = new THREE.MeshStandardMaterial({
         color: props.atmosphereColor,
         transparent: true,
         opacity: props.atmosphereOpacity,
         side: THREE.BackSide, // Afficher l'intérieur de la sphère
         emissive: props.atmosphereColor,
-        emissiveIntensity: 0.2,
+        emissiveIntensity: 0.5,
+        blending: THREE.AdditiveBlending, // Pour un effet plus brillant
         depthWrite: false // Pour l'atmosphère transparente, désactiver l'écriture dans le depth buffer
       });
       
       const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
       planetGroup.add(atmosphere);
+      
+      // Ajouter une seconde couche d'atmosphère pour un effet plus brillant
+      const outerAtmosphereGeometry = new THREE.SphereGeometry(props.radius * 1.2, 10, 10);
+      const outerAtmosphereMaterial = new THREE.MeshBasicMaterial({
+        color: props.atmosphereColor,
+        transparent: true,
+        opacity: props.atmosphereOpacity * 0.5,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      
+      const outerAtmosphere = new THREE.Mesh(outerAtmosphereGeometry, outerAtmosphereMaterial);
+      planetGroup.add(outerAtmosphere);
     }
     
-    // Ajouter un effet de halo lumineux autour de la planète
+    // Activer l'effet de halo lumineux pour une meilleure brillance
     if (props.emissiveIntensity > 0.1) {
-      const glowGeometry = new THREE.SphereGeometry(props.radius * 1.2, 32, 32);
+      const glowGeometry = new THREE.SphereGeometry(props.radius * 1.3, 16, 16);
       const glowMaterial = new THREE.MeshBasicMaterial({
         color: props.emissiveColor,
         transparent: true,
-        opacity: 0.1,
+        opacity: 0.25,
         side: THREE.BackSide,
         blending: THREE.AdditiveBlending,
-        depthWrite: false // Désactiver l'écriture dans le depth buffer pour l'effet de lueur
+        depthWrite: false
       });
       
       const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -254,18 +269,18 @@ export default class Planet3D extends GameObject3D {
    * Initialise la physique de la planète
    */
   private initPhysics(): void {
-    // Vitesse de base dépendant du type 
-    const baseSpeed = 1 / this.boundingRadius * 5;
+    // Vitesse de base qui dépend de la taille (les petites planètes sont plus rapides)
+    // Cela crée une meilleure impression de profondeur
+    const baseSpeed = 15 / (this.boundingRadius + 5); // Vitesse inversement proportionnelle à la taille
     
-    // Direction aléatoire avec une dominante vers le "bas" (vers le joueur)
+    // Pas de déplacement en Z car c'est le vaisseau qui avance maintenant
     this.velocity = new THREE.Vector3(
-      (Math.random() - 0.5) * 2,
-      -baseSpeed * (Math.random() + 0.8),
-      (Math.random() - 0.5)
+      0,                       // Pas de déplacement horizontal initial
+      0,                       // Pas de déplacement vertical initial
+      0                        // Pas de déplacement en Z
     );
     
-    // Nous n'utilisons plus la rotation externe (rotationSpeed) car les planètes
-    // tournent sur elles-mêmes (animées dans la méthode animatePlanet)
+    // Les planètes tournent sur elles-mêmes (animées dans la méthode animatePlanet)
     this.rotationSpeed = new THREE.Vector3(0, 0, 0);
   }
   
@@ -273,14 +288,44 @@ export default class Planet3D extends GameObject3D {
    * Met à jour la position et la rotation de la planète
    */
   update(deltaTime: number): void {
-    super.update(deltaTime);
-    
-    // Animer la rotation de la planète
-    this.animatePlanet(deltaTime);
-    
-    // Si la planète sort trop loin en bas de la scène, la désactiver
-    if (this.position.y < -50) {
-      this.setActive(false);
+    try {
+      if (!this.isActive || !this.mesh) return;
+      
+      // Sécurité pour éviter les NaN et les valeurs infinies
+      if (isNaN(deltaTime) || !isFinite(deltaTime) || deltaTime > 0.1) {
+        deltaTime = 0.016; // Valeur par défaut raisonnable (environ 60 FPS)
+      }
+      
+      // Léger mouvement aléatoire sur les axes X et Y uniquement
+      if (this.velocity) {
+        // Ajout d'une légère déviation aléatoire (plus rarement)
+        if (Math.random() < 0.05) { // 5% de chance à chaque frame
+          this.velocity.x += (Math.random() - 0.5) * 0.5;
+          this.velocity.y += (Math.random() - 0.5) * 0.5;
+          
+          // Limitation des vitesses latérales
+          this.velocity.x = Math.max(-1, Math.min(1, this.velocity.x));
+          this.velocity.y = Math.max(-1, Math.min(1, this.velocity.y));
+        }
+        
+        // Ajouter une vitesse beaucoup plus élevée vers le joueur (axe Z)
+        this.velocity.z = 50; // Vitesse nettement augmentée pour un jeu très dynamique
+      }
+      
+      // Mise à jour de la position avec les nouvelles vélocités
+      super.update(deltaTime);
+      
+      // Animer la rotation de la planète (effet visuel)
+      this.animatePlanet(deltaTime);
+      
+      // Désactiver la planète si elle sort complètement de l'écran (X, Y) ou dépasse le joueur (Z)
+      if (this.position.x < -30 || this.position.x > 30 || 
+          this.position.y < -30 || this.position.y > 30 ||
+          this.position.z > 20) { // Désactiver si elle passe le joueur
+        this.setActive(false);
+      }
+    } catch (error) {
+      console.error('Erreur dans update de Planet3D:', error);
     }
   }
   
@@ -290,7 +335,10 @@ export default class Planet3D extends GameObject3D {
    */
   adjustVelocity(factor: number): void {
     if (this.velocity) {
-      this.velocity.multiplyScalar(factor);
+      // Appliquer le facteur uniquement aux composantes X et Y
+      // pour ne pas affecter la vitesse d'approche en Z
+      this.velocity.x *= factor;
+      this.velocity.y *= factor;
     }
   }
   

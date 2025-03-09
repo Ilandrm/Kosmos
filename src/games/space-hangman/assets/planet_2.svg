@@ -1,0 +1,37 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="planetGradient" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#81c784" />
+      <stop offset="85%" stop-color="#388e3c" />
+      <stop offset="100%" stop-color="#1b5e20" />
+    </radialGradient>
+    <filter id="crackGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Main planet body -->
+  <circle cx="100" cy="100" r="80" fill="url(#planetGradient)" stroke="#1b5e20" stroke-width="2" />
+  
+  <!-- Surface details -->
+  <ellipse cx="70" cy="70" rx="25" ry="20" fill="#4caf50" opacity="0.5" />
+  <ellipse cx="130" cy="110" rx="30" ry="22" fill="#4caf50" opacity="0.4" />
+  <circle cx="50" cy="120" r="15" fill="#4caf50" opacity="0.3" />
+  
+  <!-- Cracks -->
+  <path d="M120,40 Q130,60 125,75 Q120,90 130,100 Q140,110 135,130" 
+        fill="none" stroke="#a5d6a7" stroke-width="1" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M120,40 Q130,60 125,75 Q120,90 130,100 Q140,110 135,130" 
+        fill="none" stroke="#2e7d32" stroke-width="2" />
+        
+  <path d="M60,65 Q70,80 65,95 Q55,110 70,125" 
+        fill="none" stroke="#a5d6a7" stroke-width="1" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M60,65 Q70,80 65,95 Q55,110 70,125" 
+        fill="none" stroke="#2e7d32" stroke-width="2" />
+        
+  <path d="M100,30 Q90,50 100,70 Q110,90 95,110" 
+        fill="none" stroke="#a5d6a7" stroke-width="1" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M100,30 Q90,50 100,70 Q110,90 95,110" 
+        fill="none" stroke="#2e7d32" stroke-width="2" />
+</svg>

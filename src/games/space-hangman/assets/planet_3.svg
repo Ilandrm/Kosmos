@@ -1,0 +1,45 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="planetGradient" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#ffb74d" />
+      <stop offset="85%" stop-color="#f57c00" />
+      <stop offset="100%" stop-color="#e65100" />
+    </radialGradient>
+    <filter id="crackGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="innerShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feOffset dx="0" dy="0" />
+      <feGaussianBlur stdDeviation="2" result="offset-blur" />
+      <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse" />
+      <feFlood flood-color="black" flood-opacity="0.6" result="color" />
+      <feComposite operator="in" in="color" in2="inverse" result="shadow" />
+      <feComposite operator="over" in="shadow" in2="SourceGraphic" />
+    </filter>
+  </defs>
+  
+  <!-- Main planet body -->
+  <circle cx="100" cy="100" r="80" fill="url(#planetGradient)" stroke="#e65100" stroke-width="2" />
+  
+  <!-- Surface details -->
+  <ellipse cx="70" cy="70" rx="25" ry="20" fill="#ff9800" opacity="0.5" />
+  <ellipse cx="130" cy="110" rx="30" ry="22" fill="#ff9800" opacity="0.4" />
+  <circle cx="50" cy="120" r="15" fill="#ff9800" opacity="0.3" />
+  
+  <!-- Major cracks -->
+  <path d="M40,80 Q60,90 70,70 Q80,50 100,40 Q120,30 140,50 Q160,70 150,100" 
+        fill="none" stroke="#ffe0b2" stroke-width="2" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M40,80 Q60,90 70,70 Q80,50 100,40 Q120,30 140,50 Q160,70 150,100" 
+        fill="none" stroke="#e65100" stroke-width="3" filter="url(#innerShadow)" />
+        
+  <path d="M60,140 Q80,130 90,110 Q100,90 120,100 Q140,110 150,130" 
+        fill="none" stroke="#ffe0b2" stroke-width="2" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M60,140 Q80,130 90,110 Q100,90 120,100 Q140,110 150,130" 
+        fill="none" stroke="#e65100" stroke-width="3" filter="url(#innerShadow)" />
+        
+  <path d="M170,100 Q140,120 120,130 Q100,140 80,130 Q60,120 40,130" 
+        fill="none" stroke="#ffe0b2" stroke-width="2" opacity="0.7" filter="url(#crackGlow)" />
+  <path d="M170,100 Q140,120 120,130 Q100,140 80,130 Q60,120 40,130" 
+        fill="none" stroke="#e65100" stroke-width="3" filter="url(#innerShadow)" />
+</svg>

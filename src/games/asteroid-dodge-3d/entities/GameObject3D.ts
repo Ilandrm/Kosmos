@@ -47,13 +47,37 @@ export default abstract class GameObject3D {
   isCollidingWith(other: GameObject3D): boolean {
     if (!this.isActive || !other.isActive) return false;
 
-    // Calcul de la distance horizontale et verticale (2D) seulement - ignorer Z
+    // Version simplifie pour les objets sur le même plan Z=0 (selon la mémoire)
+    // Si les objets ont un Z différent, on les ignore
+    const dz = Math.abs(this.mesh.position.z - other.mesh.position.z);
+    
+    // Ignorer les objets qui sont loin en profondeur
+    if (other.mesh.position.z < -3) {
+      return false;
+    }
+    
+    // Collision plus stricte - seulement quand les objets sont vraiment proches en Z
+    if (dz > 3) {
+      return false;
+    }
+    
+    // Calcul de la distance horizontale et verticale (plan XY)
     const dx = this.mesh.position.x - other.mesh.position.x;
     const dy = this.mesh.position.y - other.mesh.position.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    // Détection de collision sur le plan 2D (ignorer Z)
-    const isColliding = distance < (this.boundingRadius + other.boundingRadius);
+    // Réduction du rayon de collision pour que la collision corresponde mieux aux visuels
+    // On réduit de 50% le rayon de collision pour éviter les collisions trop tôt
+    const scaledBoundingRadius = other.boundingRadius * 0.5;
+    
+    // Ajustement du rayon de collision du joueur aussi pour éviter les collisions trop tôt
+    const scaledPlayerRadius = this.boundingRadius * 0.5;
+    
+    // Rayon de collision combiné réduit pour un contact visuel plus précis
+    const collisionRadius = scaledPlayerRadius + scaledBoundingRadius;
+    
+    // Collision plus stricte - ne se produit que lorsque les objets se touchent vraiment
+    const isColliding = distance < collisionRadius;
     
     // Debug visuel : changer la couleur du sphere de debug si collision
     if (this.debugSphere && isColliding) {

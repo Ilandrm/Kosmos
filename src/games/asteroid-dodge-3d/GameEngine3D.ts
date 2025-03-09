@@ -10,6 +10,10 @@ export default class GameEngine3D {
   private renderer: THREE.WebGLRenderer;
   private ambientLight: THREE.AmbientLight;
   private directionalLight: THREE.DirectionalLight;
+  private starField: THREE.Points | null = null; // Champ d'étoiles statique
+  private hyperspaceStars: THREE.Group | null = null; // Groupe principal pour l'effet d'hypervitesse
+  private hyperspaceIncoming: THREE.Group | null = null; // Traînées convergentes
+  private hyperspaceOutgoing: THREE.Group | null = null; // Traînées divergentes
 
   // Game objects
   private ship: Ship3D | null = null;
@@ -25,6 +29,8 @@ export default class GameEngine3D {
   private score: number = 0;
   private lives: number = 3;
   private gameTime: number = 60; // 60 seconds game time
+  private fpsCounter: number = 0;
+  private lastFpsUpdate: number = 0;
   private gameContainer: HTMLElement;
   
   // Animation d'introduction
@@ -32,8 +38,13 @@ export default class GameEngine3D {
   private introAnimationComplete: boolean = false;
   private introStartTime: number = 0;
   
+  // Variables d'optimisation des performances
+  private _animationCounter: number = 0;
+  private _lowResMode: boolean = false;
+  
   // Callbacks
   private onScoreUpdate: (score: number) => void;
+  private scoreManager: any; // Référence au ScoreManager
   private onTimeUpdate: (time: number) => void;
   private onLivesUpdate: (lives: number) => void;
   private onGameOver: (score: number) => void;
@@ -41,6 +52,13 @@ export default class GameEngine3D {
   // Pools d'objets pour optimiser les performances
   private planetPool: Planet3D[] = [];
   private bonusPool: Bonus3D[] = [];
+  
+  // Limites pour réduire la charge et améliorer les performances
+  private readonly MAX_PLANETS = 5;        // Réduit encore plus le nombre de planètes pour éviter le lag
+  private readonly MAX_ACTIVE_PARTICLES = 10; // Réduire davantage le nombre de particules
+  private readonly PHYSICS_STEP = 1/20;    // Taux encore plus bas pour la physique
+  private readonly CULLING_DISTANCE = 25;  // Réduire la distance de culling
+  private accumulatedTime = 0;             // Pour les mises à jour à pas fixe
   
   // Variables pour les effets de bonus
   private bonusEffects = {
@@ -54,7 +72,7 @@ export default class GameEngine3D {
       timeScale: 1.0
     },
     bonusSpawnTimer: 0,
-    bonusSpawnRate: 10 // Secondes entre les apparitions de bonus
+    bonusSpawnRate: 2 // Secondes entre les apparitions de bonus
   }
   
   constructor(
@@ -62,13 +80,15 @@ export default class GameEngine3D {
     onScoreUpdate: (score: number) => void,
     onTimeUpdate: (time: number) => void,
     onLivesUpdate: (lives: number) => void,
-    onGameOver: (score: number) => void
+    onGameOver: (score: number) => void,
+    scoreManager?: any
   ) {
     this.gameContainer = container;
     this.onScoreUpdate = onScoreUpdate;
     this.onTimeUpdate = onTimeUpdate;
     this.onLivesUpdate = onLivesUpdate;
     this.onGameOver = onGameOver;
+    this.scoreManager = scoreManager;
     
     // Initialiser la scène Three.js
     this.scene = new THREE.Scene();
@@ -81,10 +101,11 @@ export default class GameEngine3D {
     this.camera.position.set(0, 5, 30); // Position ajustée pour voir le vaisseau en bas
     this.camera.lookAt(0, 5, 0); // Regard pointé un peu plus haut pour voir le champ de jeu
     
-    // Configurer le renderer
+    // Configurer le renderer avec des options optimisées pour les performances
     this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      logarithmicDepthBuffer: true // Ajout d'un buffer de profondeur logarithmique pour éviter les problèmes de z-fighting
+      antialias: false, // Désactiver l'antialiasing pour améliorer les performances
+      logarithmicDepthBuffer: false, // Désactiver pour améliorer les performances
+      powerPreference: 'high-performance'
     });
     this.renderer.setSize(this.gameContainer.clientWidth, this.gameContainer.clientHeight);
     this.renderer.shadowMap.enabled = true;
@@ -113,85 +134,384 @@ export default class GameEngine3D {
   }
   
   /**
-   * Crée un fond étoilé pour la scène
+   * Crée un fond étoilé avec effet d'hypervitesse
    */
   private addStarField(): void {
-    // Créer des étoiles en arrière-plan
+    // 1. Créer le champ d'étoiles statique en arrière-plan (très peu visibles pendant l'hypervitesse)
     const starsGeometry = new THREE.BufferGeometry();
     
-    // Matériau pour les étoiles blanches classiques
-    const whiteStar = new THREE.PointsMaterial({
+    const starMaterial = new THREE.PointsMaterial({
       color: 0xffffff,
-      size: 0.1,
+      size: 0.08, // Plus petites pour moins attirer l'attention
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.4, // Moins visibles
       sizeAttenuation: true
     });
     
-    // Matériau pour les étoiles bleues
-    const blueStar = new THREE.PointsMaterial({
-      color: 0x8acdff,
-      size: 0.12,
-      transparent: true,
-      opacity: 0.7,
-      sizeAttenuation: true
-    });
-    
-    // Matériau pour les étoiles rouges/oranges
-    const redStar = new THREE.PointsMaterial({
-      color: 0xffaa77,
-      size: 0.14,
-      transparent: true,
-      opacity: 0.6,
-      sizeAttenuation: true
-    });
-    
-    const starsCount = 3000; // Plus d'étoiles pour un ciel plus dense
+    const starsCount = 400; // Réduction du nombre d'étoiles statiques
     const starsPositions = new Float32Array(starsCount * 3);
     
     for (let i = 0; i < starsCount; i++) {
       const i3 = i * 3;
-      // Distribuez les étoiles dans un grand espace autour de la scène
-      starsPositions[i3] = (Math.random() - 0.5) * 200; // Large écart horizontal
-      starsPositions[i3 + 1] = Math.random() * 100 - 10; // Plus d'étoiles au-dessus du vaisseau
-      starsPositions[i3 + 2] = -5 - Math.random() * 100; // Toutes les étoiles en arrière-plan
+      // Distribuer les étoiles en arrière-plan
+      starsPositions[i3] = (Math.random() - 0.5) * 200;     // X
+      starsPositions[i3 + 1] = Math.random() * 100 - 10;    // Y
+      starsPositions[i3 + 2] = -5 - Math.random() * 50;     // Z
     }
     
     starsGeometry.setAttribute('position', new THREE.BufferAttribute(starsPositions, 3));
+    this.starField = new THREE.Points(starsGeometry, starMaterial);
+    this.scene.add(this.starField);
     
-    // Créer trois groupes d'étoiles avec des couleurs différentes
-    const whiteStarField = new THREE.Points(starsGeometry.clone(), whiteStar);
-    const blueStarField = new THREE.Points(starsGeometry.clone(), blueStar);
-    const redStarField = new THREE.Points(starsGeometry.clone(), redStar);
+    // 2. Créer les étoiles d'hypervitesse (l'effet principal)
+    this.createHyperspaceEffect();
+  }
+  
+  /**
+   * Crée l'effet d'hypervitesse/hyperespace avec uniquement des lignes lumineuses
+   * moins intenses pour ne pas distraire du jeu principal
+   */
+  private createHyperspaceEffect(): void {
+    // Créer un groupe pour contenir l'effet tunnel hyperspatial
+    this.hyperspaceStars = new THREE.Group();
     
-    // Décaler légèrement les positions des étoiles colorées
-    const bluePositions = new Float32Array(starsPositions.length);
-    const redPositions = new Float32Array(starsPositions.length);
+    // Groupe pour les lignes lumineuses
+    this.hyperspaceOutgoing = new THREE.Group();
+    this.hyperspaceIncoming = new THREE.Group();
     
-    for (let i = 0; i < starsPositions.length; i += 3) {
-      if (Math.random() > 0.7) { // Seulement certaines seront bleues
-        bluePositions[i] = starsPositions[i] + (Math.random() - 0.5) * 20;
-        bluePositions[i+1] = starsPositions[i+1] + (Math.random() - 0.5) * 20;
-        bluePositions[i+2] = starsPositions[i+2] - Math.random() * 50;
-      } else {
-        bluePositions[i] = 1000; // Hors de la vue
+    // Paramètres du tunnel
+    const tunnelRadius = 30;
+    const tunnelLength = 400;
+    const trailsCount = 350; // Nombre total de traînées lumineuses
+    
+    // Palette de couleurs principalement grises et bleuâtres
+    const hyperspaceColors = [
+      new THREE.Color(0xcccccc), // Gris clair (dominant - 60%)
+      new THREE.Color(0xbbc5d0), // Gris bleuâtre
+      new THREE.Color(0xa9b2c3), // Gris acier
+      new THREE.Color(0x8899aa), // Gris bleu foncé
+      new THREE.Color(0x778899), // Bleu ardoise foncé
+      new THREE.Color(0x5d6d7e)  // Gris bleu moyen
+    ];
+    
+    // Augmentation du nombre de lignes pour un effet plus dense
+    const enhancedTrailsCount = 550; // Plus de lignes pour un effet plus immersif
+    
+    // Créer le tunnel principal - avec des lignes droites qui convergent vers un trou central
+    for (let i = 0; i < enhancedTrailsCount; i++) {
+      // Position aléatoire sur la circonférence du tunnel
+      const angle = Math.random() * Math.PI * 2; // Distribution uniforme sur 360 degrés
+      
+      // Créer un trou au centre en définissant un rayon minimum
+      const centralHoleRadius = 15; // Taille du trou de convergence au centre
+      const maxRadius = 40; // Extension maximale des lignes pour couvrir l'écran
+      
+      // Le rayon de départ commence au rayon du trou central minimum
+      const startRadius = centralHoleRadius + Math.random() * (maxRadius - centralHoleRadius);
+      
+      // Position de départ de la ligne dans le tunnel
+      const zPos = -tunnelLength + Math.random() * tunnelLength * 2; // Position aléatoire dans le tunnel
+      
+      // Paramètres des lignes - optimisés pour les performances
+      const lineLength = 25 + Math.random() * 25; // Lignes plus uniformes
+      const lineSegments = 2; // Réduction drastique du nombre de segments - lignes droites uniquement
+      
+      // Générer des points pour des lignes parfaitement droites qui convergent vers le centre
+      const linePoints = [];
+      for (let j = 0; j <= lineSegments; j++) {
+        const segmentLength = (j / lineSegments) * lineLength;
+        // Lignes parfaitement droites convergeant vers le centre
+        linePoints.push(new THREE.Vector3(
+          Math.cos(angle) * (startRadius - segmentLength * 0.2), // Convergence progressive vers le centre
+          Math.sin(angle) * (startRadius - segmentLength * 0.2),
+          zPos - segmentLength
+        ));
       }
       
-      if (Math.random() > 0.85) { // Encore moins seront rouges
-        redPositions[i] = starsPositions[i] + (Math.random() - 0.5) * 30;
-        redPositions[i+1] = starsPositions[i+1] + (Math.random() - 0.5) * 30;
-        redPositions[i+2] = starsPositions[i+2] - Math.random() * 80;
+      // Créer la géométrie de la ligne
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
+      
+      // Sélection de couleur favorisant le blanc et bleu
+      let lineColorIndex;
+      const colorRoll = Math.random();
+      if (colorRoll < 0.6) {
+        lineColorIndex = 0; // 60% de chance d'avoir des lignes blanches
+      } else if (colorRoll < 0.8) {
+        lineColorIndex = 1; // 20% de chance d'avoir du blanc légèrement bleu
       } else {
-        redPositions[i] = 1000; // Hors de la vue
+        lineColorIndex = 2 + Math.floor(Math.random() * 4); // 20% réparti sur les différentes teintes de bleu
       }
+      const lineColor = hyperspaceColors[lineColorIndex];
+      
+      // Matériau simple sans brillance pour des lignes sobres
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color: lineColor,
+        transparent: true,
+        opacity: 0.7, // Opacité réduite pour un effet moins intense
+        linewidth: 1 // Lignes encore plus fines pour un effet plus discret
+      });
+      
+      // Désactivation des effets de brillance
+      lineMaterial.toneMapped = true; // Activer le tone mapping pour atténuer les couleurs
+      lineMaterial.depthWrite = true; // Permettre l'occultation normale des lignes
+      
+      // Réduire la luminosité pour un effet plus terne
+      const mutedColor = new THREE.Color(lineColor);
+      mutedColor.r = Math.min(1, mutedColor.r * 0.7);
+      mutedColor.g = Math.min(1, mutedColor.g * 0.7);
+      mutedColor.b = Math.min(1, mutedColor.b * 0.7);
+      lineMaterial.color = mutedColor;
+      
+      // Créer la ligne lumineuse finale
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      
+      // Ajouter des données utilisateur pour l'animation
+      line.userData = {
+        angle: angle,
+        radius: startRadius,
+        speed: 40 + Math.random() * 80, // Vitesse variable
+        z: zPos,
+        baseColor: lineColor.clone(), // Stocker la couleur de base pour les variations
+        lifetime: 0,
+        maxLifetime: 4 + Math.random() * 3, // Durée de vie avant réinitialisation
+        animationOffset: Math.random() * Math.PI * 2 // Offset aléatoire pour l'animation
+      };
+      
+      // Ajouter la ligne au groupe
+      this.hyperspaceOutgoing.add(line);
     }
     
-    blueStarField.geometry.setAttribute('position', new THREE.BufferAttribute(bluePositions, 3));
-    redStarField.geometry.setAttribute('position', new THREE.BufferAttribute(redPositions, 3));
+    // Ajouter les groupes au groupe principal
+    this.hyperspaceStars.add(this.hyperspaceOutgoing);
+    this.hyperspaceStars.add(this.hyperspaceIncoming);
     
-    this.scene.add(whiteStarField);
-    this.scene.add(blueStarField);
-    this.scene.add(redStarField);
+    // Ajouter une inclinaison plus prononcée pour un effet plus dynamique
+    this.hyperspaceStars.rotation.x = Math.PI * 0.08;
+    
+    if (this.scene) {
+      this.scene.add(this.hyperspaceStars);
+    }
+  }
+  
+  /**
+   * Crée une texture de lueur améliorée pour les points lumineux avec une brillance accrue
+   */
+  private createGlowTexture(): THREE.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; // Augmentation de la résolution pour une meilleure qualité
+    canvas.height = 64;
+    
+    const context = canvas.getContext('2d');
+    if (!context) return new THREE.Texture();
+    
+    // Créer un dégradé radial plus intense pour un effet de brillance amélioré
+    const gradient = context.createRadialGradient(
+      canvas.width / 2, canvas.height / 2, 0,
+      canvas.width / 2, canvas.height / 2, canvas.width / 2
+    );
+    
+    // Noyau blanc plus intense
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.1, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    // Remplir avec le dégradé principal
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Ajouter un effet de halo supplémentaire pour une brillance accrue
+    context.globalCompositeOperation = 'lighter';
+    
+    const haloGradient = context.createRadialGradient(
+      canvas.width / 2, canvas.height / 2, canvas.width / 12,
+      canvas.width / 2, canvas.height / 2, canvas.width / 2.5
+    );
+    
+    haloGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+    haloGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+    haloGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    context.fillStyle = haloGradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    const texture = new THREE.Texture(canvas);
+    texture.needsUpdate = true;
+    
+    return texture;
+  }
+  
+  // Fin des méthodes de création de l'effet hyperespace
+  
+  /**
+   * Anime l'effet d'hypervitesse avec un tunnel spatial dynamique uniquement composé de lignes
+   * @param deltaTime Temps écoulé depuis la dernière frame
+   */
+  private animateStars(deltaTime: number): void {
+    // Animation du champ d'étoiles arrière-plan 
+    if (this.starField) {
+      this.starField.rotation.y += deltaTime * 0.001; // Rotation plus rapide
+      // Opacité réduite pendant l'effet d'hypervitesse
+      (this.starField.material as THREE.PointsMaterial).opacity = 0.4;
+    }
+    
+    // Animation du tunnel spatial
+    if (!this.hyperspaceStars || !this.hyperspaceOutgoing) return;
+    
+    // Rotation simple et constante du tunnel pour un effet propre et stable
+    // Seulement rotation sur l'axe Z (dans le plan de l'écran) pour éviter les bugs visuels
+    this.hyperspaceStars.rotation.z += deltaTime * 0.02;
+    
+    // Réinitialiser les autres rotations pour éviter les effets indésirables
+    this.hyperspaceStars.rotation.x = 0;
+    this.hyperspaceStars.rotation.y = 0;
+    
+    // Parcours des lignes lumineuses
+    this.hyperspaceOutgoing.children.forEach((child) => {
+      if (child instanceof THREE.Line) {
+        const line = child as THREE.Line;
+        const userData = line.userData;
+        if (userData) {
+          // Incrémenter le compteur de durée de vie
+          userData.lifetime += deltaTime;
+          
+          // Mise à jour de la position Z (déplacement vers l'avant)
+          userData.z += userData.speed * deltaTime * 4.0; // Vitesse augmentée de 300%
+          
+          // On garde l'angle fixe pour chaque ligne - pas de variation pour éviter la dispersion
+          // userData.angle reste constant tout au long de la vie de la ligne
+          
+          // Mise à jour de la géométrie de la ligne
+          const lineGeometry = line.geometry as THREE.BufferGeometry;
+          const positions = [];
+          
+          // Générer des points pour des lignes ABSOLUMENT droites qui convergent vers le centre
+          const lineLength = 25 + Math.random() * 15; // Lignes plus courtes pour plus de détails
+          const lineSegments = 2; // SEULEMENT 2 points pour garantir des lignes parfaitement droites
+          
+          // Angle fixe pour chaque ligne
+          const angle = userData.angle;
+          const radius = userData.radius;
+          
+          // Point central de convergence (origine visuelle du tunnel)
+          const convergenceZ = -140; // Point de convergence en Z plus profond
+          
+          // Taille du trou central (rayon minimum pour toutes les lignes)
+          const centralHoleRadius = 15;
+          
+          // Facteur d'échelle basé sur la distance au point de convergence - rendu plus constant
+          const distanceToConvergence = Math.abs(userData.z - convergenceZ);
+          const scaleFactor = Math.min(1, distanceToConvergence / 180);
+          
+          // Début de la ligne - point le plus proche du joueur
+          const startRadius = Math.max(
+            centralHoleRadius,
+            radius * scaleFactor
+          );
+          
+          // Premier point - près du joueur
+          positions.push(new THREE.Vector3(
+            Math.cos(angle) * startRadius,
+            Math.sin(angle) * startRadius,
+            userData.z
+          ));
+          
+          // Second point - au loin, pour garantir une ligne parfaitement droite
+          positions.push(new THREE.Vector3(
+            Math.cos(angle) * startRadius * 0.65, // Léger rétrécissement pour l'effet de convergence
+            Math.sin(angle) * startRadius * 0.65, // Léger rétrécissement pour l'effet de convergence
+            userData.z - lineLength
+          ));
+          
+          // Mise à jour de la géométrie
+          lineGeometry.setFromPoints(positions);
+          
+          // Ajuster l'opacité et l'intensité pour un effet ULTRA BRILLANT
+          const material = line.material as THREE.LineBasicMaterial;
+          
+          // Facteur d'intensité réduit pour un effet moins éblouissant
+          const intensityFactor = Math.max(0, Math.min(0.7, (userData.z + 200) / 450)); // Réduction du facteur max
+          
+          // Pulsation d'opacité plus subtile
+          const pulse = 0.7 + 0.1 * Math.sin(performance.now() * 0.002 + userData.animationOffset);
+          
+          // Opacité réduite pour un effet moins éblouissant
+          material.opacity = 0.85;
+          
+          // Couleur de base pour les variations
+          const baseColor = userData.baseColor;
+          
+          // Luminosité réduite pour un effet moins brillant
+          const brightnessBoost = 1.3 + intensityFactor * 0.8; // Valeurs plus faibles
+          
+          // Appliquer une brillance plus douce à la couleur de base
+          material.color.setRGB(
+            Math.min(0.9, baseColor.r * brightnessBoost),
+            Math.min(0.9, baseColor.g * brightnessBoost),
+            Math.min(0.9, baseColor.b * brightnessBoost)
+          );
+          
+          // Continuer à utiliser AdditiveBlending mais avec une intensité réduite
+          material.blending = THREE.AdditiveBlending;
+          // Réduire l'opacité des lignes plus éloignées
+          if (userData.z < -100) {
+            material.opacity *= 0.7; // Encore moins visible en profondeur
+          }
+          
+          // Réinitialiser la ligne quand elle sort du champ de vision ou a atteint sa durée de vie maximale
+          if (userData.z > 120 || userData.lifetime > userData.maxLifetime) {
+            // Position plus éloignée pour un meilleur effet de perspective
+            userData.z = -160 - Math.random() * 90; // Distance entre 160 et 250 units
+            userData.lifetime = 0;
+            
+            // Distribution uniforme des angles pour remplir tout l'espace autour du trou central
+            userData.angle = Math.random() * Math.PI * 2;
+            
+            // Taille du trou central (rayon minimum pour toutes les lignes)
+            const centralHoleRadius = 15;
+            
+            // Rayon de départ basé sur la distance - les lignes plus éloignées ont un rayon plus grand
+            // pour créer l'effet de perspective
+            const maxRadius = 40; // Radius maximum
+            userData.radius = centralHoleRadius + Math.random() * (maxRadius - centralHoleRadius);
+            
+            // Vitesse variable pour plus de dynamisme 
+            userData.speed = 35 + Math.random() * 30;
+            
+            // Autres paramètres d'animation
+            userData.animationOffset = Math.random() * Math.PI * 2;
+            userData.maxLifetime = 2 + Math.random() * 3;
+            
+            // Palette de couleurs limitée à blanc et bleu pour l'effet hypervitesse
+            const whiteBlueColors = [
+              // Palette blanc et bleu uniquement
+              new THREE.Color(0xffffff), // Blanc pur (dominant - 60%)
+              new THREE.Color(0xf8f9ff), // Blanc légèrement bleu
+              new THREE.Color(0xdcf0ff), // Bleu très clair
+              new THREE.Color(0xc0e8ff), // Bleu ciel clair
+              new THREE.Color(0x99ccff), // Bleu ciel
+              new THREE.Color(0x4d94ff)  // Bleu moyen
+            ];
+            
+            // Favoriser les teintes blanches (60%)
+            let colorIndex;
+            const colorRoll = Math.random();
+            if (colorRoll < 0.6) {
+              colorIndex = 0; // Blanc pur
+            } else if (colorRoll < 0.75) {
+              colorIndex = 1; // Blanc bleuté
+            } else {
+              colorIndex = 2 + Math.floor(Math.random() * 4); // Une des teintes bleues
+            }
+            
+            const newColor = whiteBlueColors[colorIndex];
+            material.color = newColor;
+            userData.baseColor = newColor.clone();
+          }
+        }
+      }
+    });
   }
   
   /**
@@ -211,12 +531,77 @@ export default class GameEngine3D {
   /**
    * Définit la position cible du vaisseau en fonction de la position de la souris
    * @param mouseX Position X de la souris convertie en coordonnées du monde
+   * @param mouseY Position Y de la souris convertie en coordonnées du monde
+   * @param isDragging Si true, le vaisseau suivra la position de la souris. Si false, la cible sera ignorée.
    */
-  public setMousePosition(mouseX: number): void {
+  public setMousePosition(mouseX: number, mouseY: number, isDragging: boolean = false): void {
     if (!this.isRunning || this.isPaused || !this.ship) return;
     
-    // Envoyer la position cible au vaisseau
-    this.ship.setTargetX(mouseX);
+    // IMPORTANT: N'envoyer les targets que si isDragging est true
+    // C'est ce qui garantit que le vaisseau ne bouge que quand l'utilisateur le déplace activement
+    if (isDragging) {
+      // S'assurer que les targets sont toujours transmises avec le flag isDragging=true
+      // pour que Ship3D sache qu'il s'agit d'un mouvement intentionnel
+      this.ship.setTargetX(mouseX, true);
+      this.ship.setTargetY(mouseY, true);
+    } else {
+      // Si isDragging est false, explicitement réinitialiser les targets
+      // pour empêcher tout mouvement automatique
+      this.ship.setTargetX(0, false);
+      this.ship.setTargetY(0, false);
+    }
+  }
+  
+  /**
+   * Retourne la position du vaisseau en coordonnées écran (pixels)
+   * @returns {x: number, y: number} Position du vaisseau sur l'écran, ou null si le vaisseau n'existe pas
+   */
+  public getShipScreenPosition(): {x: number, y: number} | null {
+    if (!this.ship || !this.camera || !this.renderer) return null;
+    
+    // Obtenir la position 3D du vaisseau
+    const position = this.ship.position.clone();
+    
+    // Convertir la position 3D en coordonnées écran
+    const vector = position.project(this.camera);
+    
+    // Obtenir les dimensions réelles du canvas
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    const canvasWidth = rect.width;
+    const canvasHeight = rect.height;
+    
+    // Convertir les coordonnées normalisées (-1 à 1) en pixels selon les dimensions réelles du canvas
+    const x = ((vector.x + 1) / 2) * canvasWidth + rect.left;
+    const y = ((-vector.y + 1) / 2) * canvasHeight + rect.top;
+    
+    return {x, y};
+  }
+  
+  /**
+   * Retourne la position du vaisseau en coordonnées monde (espace 3D)
+   * @returns {x: number, y: number, z: number} Position du vaisseau dans l'espace 3D, ou null si le vaisseau n'existe pas
+   */
+  public getShipWorldPosition(): {x: number, y: number, z: number} | null {
+    if (!this.ship) return null;
+    
+    return {
+      x: this.ship.position.x,
+      y: this.ship.position.y,
+      z: this.ship.position.z
+    };
+  }
+  
+  /**
+   * Définit directement la position X du vaisseau sans utiliser le système de position cible
+   * Cette méthode est utilisée pour le glisser-déposer du vaisseau
+   * @param x Nouvelle position X du vaisseau
+   */
+  public setShipDirectPosition(x: number): void {
+    if (!this.isRunning || this.isPaused || !this.ship) return;
+    
+    // Mettre à jour directement la position X du vaisseau
+    this.ship.setPositionX(x);
   }
   
   /**
@@ -260,8 +645,8 @@ export default class GameEngine3D {
     this.gameTime = 60;
     this.spawnTimer = 0;
     
-    // Réinitialiser l'animation d'introduction
-    this.isIntroPlaying = false;
+    // Réinitialiser l'animation d'introduction - préparer pour qu'elle s'exécute
+    this.isIntroPlaying = true;  // Forcer l'animation à jouer
     this.introAnimationComplete = false;
     
     // Réinitialiser les effets de bonus
@@ -276,7 +661,7 @@ export default class GameEngine3D {
         timeScale: 1.0
       },
       bonusSpawnTimer: this.bonusEffects.bonusSpawnRate * 0.5, // Premier bonus apparaît plus tôt
-      bonusSpawnRate: 10
+      bonusSpawnRate: 5
     };
     
     // NOTE: Le vaisseau est créé dans la méthode start() pour éviter les doublons
@@ -293,24 +678,64 @@ export default class GameEngine3D {
   start(): void {
     if (this.isRunning) return;
     
-    this.init();
-    this.isRunning = true;
-    this.isPaused = false;
-    
-    // Démarrer l'animation d'introduction
-    this.isIntroPlaying = true;
-    this.introStartTime = performance.now();
-    
-    // Créer le vaisseau du joueur
-    this.ship = new Ship3D(this.scene);
-    
-    // Positionner le vaisseau en dehors de l'écran pour l'animation d'entrée
-    this.ship.position = new THREE.Vector3(0, -15, 30);
-    // Orienter le vaisseau vers la caméra
-    this.ship.mesh.rotation.x = Math.PI / 4;
-    
-    this.lastTime = performance.now();
-    this.animate();
+    try {
+      this.init();
+      this.isRunning = true;
+      this.isPaused = false;
+      
+      // Démarrer l'animation d'introduction - forcer son activation
+      this.isIntroPlaying = true;
+      this.introAnimationComplete = false; // Réinitialiser pour s'assurer que l'intro joue
+      this.introStartTime = performance.now();
+      
+      // Créer le vaisseau du joueur - avec un try/catch sécurisé
+      try {
+        this.ship = new Ship3D(this.scene);
+        
+        // Positionner le vaisseau en dehors de l'écran pour l'animation d'entrée
+        this.ship.position = new THREE.Vector3(0, -20, 50); // Position encore plus éloignée pour que l'anim soit visible
+        // Orienter le vaisseau vers la caméra
+        this.ship.mesh.rotation.x = Math.PI / 3; // Incliner davantage pour mieux voir l'animation
+      } catch (error) {
+        console.error('Erreur lors de la création du vaisseau:', error);
+        // Récupération en créant un vaisseau simple
+        const shipGroup = new THREE.Group();
+        this.scene.add(shipGroup);
+        this.ship = { 
+          position: new THREE.Vector3(0, -15, 30),
+          mesh: shipGroup,
+          update: () => {},
+          isReady: () => true, // Simuler un vaisseau prêt
+          dispose: () => {},
+          setTargetX: () => {},
+          isInvulnerable: false
+        } as any; // Cast en Ship3D (incomplet mais suffisant)
+      }
+      
+      // Initialisation du temps de jeu avec un délai sécuritaire
+      this.lastTime = performance.now();
+      
+      // Démarrer l'animation avec un délai pour s'assurer que tout est prêt
+      setTimeout(() => {
+        try {
+          console.log('Animation démarrée');
+          this.animate();
+        } catch (error) {
+          console.error('Erreur lors du démarrage de l\'animation:', error);
+        }
+      }, 200);
+    } catch (error) {
+      console.error('Erreur lors du démarrage du jeu:', error);
+      // Tenter de récupérer de l'erreur
+      setTimeout(() => {
+        try {
+          this.init();
+          this.start();
+        } catch (e) {
+          console.error('Impossible de récupérer après erreur:', e);
+        }
+      }, 1000);
+    }
   }
   
   /**
@@ -330,10 +755,23 @@ export default class GameEngine3D {
     const elapsedTime = (currentTime - this.introStartTime) / 1000; // en secondes
     const animationDuration = 3.0; // durée totale de l'animation en secondes
     
+    // Forcer l'animation à jouer, peu importe les autres conditions
+    this.isIntroPlaying = true;
+    
     if (elapsedTime >= animationDuration) {
       // Animation terminée, placer le vaisseau à sa position finale
+      // IMPORTANT: Fixer la position Y à -8 (bas de l'écran)
       this.ship.position = new THREE.Vector3(0, -8, 0);
       this.ship.mesh.rotation.x = 0;
+      
+      // CRUCIAL: Réinitialiser les targets à null pour éviter tout mouvement automatique
+      // après l'animation d'introduction
+      if (typeof this.ship.setTargetX === 'function' && typeof this.ship.setTargetY === 'function') {
+        this.ship.setTargetX(0, false);
+        this.ship.setTargetY(0, false);
+      }
+      
+      console.log('Animation d\'introduction terminée, mouvements libres activés');
       
       // Terminer l'animation et commencer le jeu réel
       this.isIntroPlaying = false;
@@ -401,48 +839,149 @@ export default class GameEngine3D {
   }
   
   /**
-   * Boucle d'animation principale
+   * Boucle d'animation principale avec optimisation des performances et sécurité
    */
   private animate(): void {
-    if (!this.isRunning) return;
-    
-    const now = performance.now();
-    const deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // sec, limité à 0.1s
-    this.lastTime = now;
-    
-    if (!this.isPaused) {
-      this.update(deltaTime);
+    try {
+      if (!this.isRunning) return;
+      
+      const now = performance.now();
+      let deltaTime = 0;
+      
+      // Sécurité additionnelle pour la première seconde de jeu
+      const timeSinceStart = now - this.introStartTime;
+      if (timeSinceStart < 2000) {
+        // Durant les 2 premières secondes, utiliser un deltaTime fixe très faible
+        // pour éviter les problèmes de calcul qui causent le crash à 1 seconde
+        deltaTime = 0.01; // 10ms, deltaTime fixe et sécuritaire
+        
+        // Éviter de faire des opérations complexes dans la première seconde
+        this.lastTime = now;
+        // Ne pas générer de planètes ni faire de collisions pendant le démarrage
+        if (!this.isPaused) {
+          // Les étoiles DOIVENT être animées en continu, y compris pendant l'intro
+          this.animateStars(deltaTime * 2); // Augmentation de la vitesse pour un effet plus dynamique
+          
+          if (this.ship) {
+            // Mettre à jour le vaisseau
+            this.ship.update(deltaTime);
+          }
+          
+          // Mettre à jour l'animation d'introduction si nécessaire
+          if (this.isIntroPlaying) {
+            this.updateIntroAnimation();
+          }
+        }
+      } else {
+        // Après 2 secondes, fonctionnement normal
+        deltaTime = Math.min((now - this.lastTime) / 1000, 0.1); // sec, limité à 0.1s
+        this.lastTime = now;
+        
+        if (!this.isPaused) {
+          try {
+            this.update(deltaTime);
+          } catch (error) {
+            console.error('Erreur dans update:', error);
+          }
+        }
+      }
+      
+      try {
+        // Optimisation améliorée: adaptation dynamique de la qualité
+        // Si le FPS est bas, réduire temporairement la qualité du rendu
+        if (deltaTime > 0.05) { // Moins de 20 FPS
+          // Réduire temporairement la résolution du rendu
+          if (!this._lowResMode) {
+            this._lowResMode = true;
+            // Réduire la résolution à 75% pour gagner en performances
+            const currentSize = this.renderer.getSize(new THREE.Vector2());
+            this.renderer.setSize(
+              Math.floor(currentSize.x * 0.75),
+              Math.floor(currentSize.y * 0.75),
+              false // Ne pas mettre à jour le style CSS
+            );
+          }
+          this.renderer.render(this.scene, this.camera);
+        } else { // Bon framerate
+          // Restaurer la résolution normale si nécessaire
+          if (this._lowResMode) {
+            this._lowResMode = false;
+            this.handleResize(); // Restaurer la taille normale
+          }
+          this.renderer.render(this.scene, this.camera);
+        }
+      } catch (error) {
+        console.error('Erreur dans le rendu:', error);
+      }
+      
+      requestAnimationFrame(this.animate.bind(this));
+    } catch (error) {
+      console.error('Erreur fatale dans animate:', error);
+      // Tenter de récupérer le jeu
+      setTimeout(() => {
+        console.log('Tentative de récupération...');
+        requestAnimationFrame(this.animate.bind(this));
+      }, 1000);
     }
-    
-    this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame(this.animate.bind(this));
   }
   
   /**
    * Met à jour l'état du jeu à chaque frame
    */
   private update(deltaTime: number): void {
-    // Gérer l'animation d'introduction
-    if (this.isIntroPlaying) {
-      this.updateIntroAnimation();
-      return; // Ne pas mettre à jour le reste du jeu pendant l'intro
-    }
-    
-    // Ajuster le deltaTime si le ralentissement du temps est actif
-    if (this.bonusEffects.slowTime.active) {
-      deltaTime *= this.bonusEffects.slowTime.timeScale;
-    }
-    
-    // Augmenter la vitesse globale du jeu de 50%
-    deltaTime *= 1.5;
-    
-    // Mettre à jour le temps de jeu
-    if (this.gameTime > 0) {
-      this.gameTime -= deltaTime;
+    try {
+      // Vérifier si l'animation d'introduction doit être jouée
+      // Forçage de l'animation d'intro au début
+      if (!this.introAnimationComplete && this.ship && this.lastTime < 5000) {
+        // Forçage de l'animation pendant les 5 premières secondes
+        this.isIntroPlaying = true;
+      }
+
+      // Animer les étoiles en arrière-plan - Toujours exécuté, même pendant l'intro
+      this.animateStars(deltaTime);
+      
+      // Gérer l'animation d'introduction
+      if (this.isIntroPlaying) {
+        // Exécuter l'animation d'intro explicitement
+        console.log("Animation d'introduction en cours...");
+        this.updateIntroAnimation();
+        return; // Ne pas mettre à jour le reste du jeu pendant l'intro
+      }
+      
+      // Sécurité supplémentaire pour éviter les problèmes de timing
+      const timeSinceStart = performance.now() - this.introStartTime;
+      if (timeSinceStart < 2000) {
+        // Ne faire que des opérations minimales pendant les 2 premières secondes
+        if (this.ship) {
+          this.ship.update(deltaTime);
+        }
+        return;
+      }
+      
+      // Ajuster le deltaTime si le ralentissement du temps est actif
+      if (this.bonusEffects.slowTime.active) {
+        deltaTime *= this.bonusEffects.slowTime.timeScale;
+      }
+      
+      // Réduire la vitesse globale du jeu pour alléger les calculs
+      deltaTime *= 1.2;
+      
+      // Mettre à jour le temps de jeu
+      if (this.gameTime > 0) {
+        this.gameTime -= deltaTime;
+        
+        // Mesurer et optimiser les FPS - utiliser performance.now()
+        const currentTime = performance.now();
+        this.fpsCounter++;
+        if (currentTime - this.lastFpsUpdate > 1000) { // Mettre à jour toutes les secondes
+          // DEBUG: console.log('FPS:', this.fpsCounter);
+          this.fpsCounter = 0;
+          this.lastFpsUpdate = currentTime;
+        }
       
       if (this.gameTime <= 0) {
         this.gameTime = 0;
-        this.endGame();
+        this.gameOver(); // Utiliser la fonction gameOver au lieu de endGame
         return; // Sortir de la fonction pour éviter tout autre traitement
       }
       
@@ -451,50 +990,70 @@ export default class GameEngine3D {
       this.onTimeUpdate(roundedTime);
     }
     
-    // Mettre à jour le vaisseau
-    if (this.ship) {
-      this.ship.update(deltaTime);
+    try {
+      // Mettre à jour le vaisseau
+      if (this.ship) {
+        this.ship.update(deltaTime);
+      }
+      
+      // Mettre à jour les planètes avec sécurité
+      // Ajouter un délai de sécurité avant de commencer à mettre à jour les planètes
+      if (this.lastTime > 1500) {
+        this.updatePlanets(deltaTime);
+      }
+      
+      // Mettre à jour les bonus
+      this.updateBonuses(deltaTime);
+      
+      // Gérer les effets de bonus
+      this.updateBonusEffects(deltaTime);
+      
+      // Vérifier les collisions avec sécurité
+      if (this.ship && !this.bonusEffects.shield.active) {
+        this.checkCollisions();
+      }
+      this.checkBonusCollisions(); // Vérifier aussi les collisions avec les bonus
+      
+      // Augmenter progressivement la difficulté
+      this.difficulty += deltaTime * 0.05;
+    } catch (error) {
+      console.error('Erreur dans les mises à jour de jeu:', error);
     }
-    
-    // Mettre à jour les planètes
-    this.updatePlanets(deltaTime);
-    
-    // Mettre à jour les bonus
-    this.updateBonuses(deltaTime);
-    
-    // Gérer les effets de bonus
-    this.updateBonusEffects(deltaTime);
-    
-    // Vérifier les collisions
-    this.checkCollisions();
-    this.checkBonusCollisions(); // Vérifier aussi les collisions avec les bonus
-    
-    // Augmenter progressivement la difficulté
-    this.difficulty += deltaTime * 0.05;
+    } catch (error) {
+      console.error('Erreur critique dans update:', error);
+    }
     
     // Spawn de nouveaux objets avec un contrôle amélioré
     this.spawnTimer -= deltaTime;
     if (this.spawnTimer <= 0) {
-      // Ne pas créer de nouvelles planètes si trop de planètes sont déjà en jeu
-      const maxPlanets = 15 + Math.min(15, Math.floor(this.difficulty)); // Augmentation du nombre max de planètes
-      if (this.planets.length < maxPlanets) {
-        this.spawnPlanet();
-        
-        // Chance de spawn d'une planète supplémentaire si on n'a pas atteint le maximum
-        if (this.planets.length < maxPlanets && Math.random() < 0.3) {
+      // Limiter strictement le nombre de planètes pour éviter les surcharges
+      const maxPlanets = this.MAX_PLANETS + Math.min(3, Math.floor(this.difficulty / 2)); // Augmentation beaucoup plus lente
+      // Sécurité: ajouter un délai après le démarrage pour éviter le plantage à 1 seconde
+      if (this.lastTime > 1500 && this.planets.length < maxPlanets) {
+        try {
           this.spawnPlanet();
+          
+          // Réduire la chance de spawn multiple pour éviter la surcharge
+          if (this.planets.length < maxPlanets && Math.random() < 0.15) {
+            this.spawnPlanet();
+          }
+        } catch (error) {
+          console.error('Erreur lors du spawn de planète:', error);
         }
       }
       // Ajuster le temps de spawn en fonction de la difficulté
       this.spawnTimer = Math.max(2.0 - this.difficulty * 0.1, 0.5);
     }
     
-    // Spawn de bonus occasionnels
+    // Spawn de bonus occasionnels - moins fréquents pour réduire la charge
     this.bonusEffects.bonusSpawnTimer -= deltaTime;
     if (this.bonusEffects.bonusSpawnTimer <= 0) {
-      this.spawnRandomBonus(); // Utiliser spawnRandomBonus au lieu de spawnBonus sans paramètres
-      // Réinitialiser le minuteur de spawn de bonus (toutes les 10-15 secondes)
-      this.bonusEffects.bonusSpawnTimer = 10 + Math.random() * 5;
+      // Limiter le nombre total d'objets en mouvement
+      if (this.bonuses.length < 2) {
+        this.spawnRandomBonus();
+      }
+      // Réinitialiser le minuteur de spawn de bonus (toutes les 15-20 secondes)
+      this.bonusEffects.bonusSpawnTimer = 15 + Math.random() * 5;
     }
   }
   
@@ -502,19 +1061,40 @@ export default class GameEngine3D {
    * Met à jour les planètes et en génère de nouvelles
    */
   private updatePlanets(deltaTime: number): void {
-    // Mettre à jour les planètes existantes
-    for (let i = this.planets.length - 1; i >= 0; i--) {
-      const planet = this.planets[i];
-      
-      planet.update(deltaTime);
-      
-      // Supprimer les planètes inactives
-      if (!planet.getActive()) {
-        this.planets.splice(i, 1);
-        this.planetPool.push(planet); // Recycler la planète
+    try {
+      // Sécurité pour éviter les erreurs au début du jeu
+      if (performance.now() - this.introStartTime < 3000) {
+        return; // Ne pas mettre à jour les planètes dans les 3 premières secondes
       }
+      
+      // Mettre à jour les planètes existantes
+      for (let i = this.planets.length - 1; i >= 0; i--) {
+        const planet = this.planets[i];
+        
+        try {
+          planet.update(deltaTime);
+        } catch (error) {
+          console.error('Erreur lors de la mise à jour d\'une planète:', error);
+          // Supprimer la planète en cas d'erreur pour éviter des problèmes futurs
+          this.planets.splice(i, 1);
+          continue;
+        }
+        
+        // Supprimer les planètes inactives
+        if (!planet.getActive()) {
+          this.planets.splice(i, 1);
+          this.planetPool.push(planet); // Recycler la planète
+        }
+      }
+    } catch (error) {
+      console.error('Erreur générale dans updatePlanets:', error);
     }
-    
+  }
+  
+  /**
+   * Génère une nouvelle planète avec paramètres adaptés à la difficulté actuelle
+   */
+  private generatePlanet(x?: number, y?: number, z: number = 0, type?: PlanetType): void {
     // Fréquence variable pour plus de planètes avec la difficulté croissante
     const baseSpawnRate = Math.max(0.3, 1 - this.difficulty * 0.1);
     const effectiveRate = baseSpawnRate + Math.random() * 0.2;
@@ -527,73 +1107,93 @@ export default class GameEngine3D {
     const maxPlanets = 10 + Math.min(10, Math.floor(this.difficulty));
     const surpriseChance = 0.003 + (0.002 * this.difficulty); // Réduit pour éviter trop de planètes
     
+    // Si un deltaTime est passé en paramètre (appelé depuis update)
+    const deltaTime = 0.016; // Valeur par défaut si pas passée
     if (this.planets.length < maxPlanets && Math.random() < surpriseChance * deltaTime) {
-      // Type vraiment aléatoire
+      // Utiliser seulement 2 types de planètes pour réduire la charge de textures
       const typeArray = [
         PlanetType.EARTH,
-        PlanetType.MARS,
-        PlanetType.VENUS,
-        PlanetType.JUPITER,
-        PlanetType.NEPTUNE
+        PlanetType.MARS
       ];
       
       const randomIndex = Math.floor(Math.random() * typeArray.length);
       const type = typeArray[randomIndex];
       
-      // Position sur les côtés pour des attaques surprises
-      let posX, posY;
-      if (Math.random() < 0.5) {
-        // Côtés gauche/droit
-        posX = (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 5);
-        posY = (Math.random() - 0.5) * 20;
+        // Déterminer si nous voulons faire apparaître la planète depuis le point de convergence (70% du temps)
+      // ou depuis les bords pour des attaques surprises (30% du temps)
+      if (Math.random() < 0.7) {
+        // Point de convergence des lignes d'hypervitesse au loin
+        const convergencePointY = 60;
+        const posX = (Math.random() - 0.5) * 10; // Variation réduite en X au point d'origine
+        const posY = convergencePointY + Math.random() * 5; // Légère variation en Y
+        const posZ = 0; // Toujours sur le même plan Z
+        
+        this.spawnPlanet(type, new THREE.Vector3(posX, posY, posZ));
       } else {
-        // Haut/bas
-        posX = (Math.random() - 0.5) * 40;
-        posY = (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 5);
+        // Apparition surprise depuis les côtés (comme avant)
+        let posX, posY;
+        if (Math.random() < 0.5) {
+          // Côtés gauche/droit
+          posX = (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 5);
+          posY = 10 + Math.random() * 20; // Un peu plus haut pour sembler venir de plus loin
+        } else {
+          // Haut seulement (plus de bas car cela n'a pas de sens avec le point de convergence)
+          posX = (Math.random() - 0.5) * 30;
+          posY = 30 + Math.random() * 10; // Toujours par le haut
+        }
+        
+        const posZ = 0; // Toujours sur le même plan Z maintenant
+        this.spawnPlanet(type, new THREE.Vector3(posX, posY, posZ));
       }
-      
-      const posZ = (Math.random() - 0.5) * 5; // Ajouter de la profondeur
-      this.spawnPlanet(type, new THREE.Vector3(posX, posY, posZ));
     }
   }
   
   /**
    * Crée ou récupère une planète du pool et l'ajoute à la scène
+   * Les planètes apparaissent maintenant depuis le trou central de l'effet d'hypervitesse
    */
   private spawnPlanet(type?: PlanetType, position?: THREE.Vector3): void {
-    // Si aucun type n'est spécifié, en choisir un aléatoirement
-    if (!type) {
-      const typeSelector = Math.random();
-      
-      if (typeSelector < 0.2) {
-        type = PlanetType.EARTH;
-      } else if (typeSelector < 0.4) {
-        type = PlanetType.MARS;
-      } else if (typeSelector < 0.6) {
-        type = PlanetType.VENUS;
-      } else if (typeSelector < 0.8) {
-        type = PlanetType.JUPITER;
-      } else {
-        type = PlanetType.NEPTUNE;
+    try {
+      // Sécurité: vérifier que le moteur est prêt avant de spawner des objets
+      if (!this.isRunning || this.isPaused || this.lastTime < 1000) {
+        return;
       }
+      
+      // Si aucun type n'est spécifié, en choisir un aléatoirement
+      if (!type) {
+        // Limiter à seulement deux types pour réduire la charge de textures
+        if (Math.random() < 0.5) {
+          type = PlanetType.EARTH;
+        } else {
+          type = PlanetType.MARS;
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation du spawn de planète:', error);
+      return; // Sortir pour éviter d'autres erreurs
     }
     
-    // Si aucune position n'est spécifiée, en générer une aléatoire
-    if (!position) {
-      // Position X aléatoire sur une plage plus large pour éviter les regroupements
-      const posX = (Math.random() - 0.5) * 40;
-      
-      // Position Y au-dessus de l'écran avec une hauteur variable
-      // Éviter de créer des planètes trop proches entre elles en hauteur
-      const posY = 30 + Math.random() * 10;
-      
-      // Position Z fixée à 0 pour être au même niveau que le vaisseau
-      const posZ = 0;
-      
-      position = new THREE.Vector3(posX, posY, posZ);
+    // Définir les paramètres de la zone de spawn
+    const spawnRadius = 15; // Zone de spawn des planètes
+    
+    // Générer une position aléatoire dans la zone de spawn
+    const angle = Math.random() * Math.PI * 2; // Angle aléatoire (0-360 degrés)
+    
+    // Rayon aléatoire pour la distribution des planètes
+    const randomRadius = Math.random() * (spawnRadius * 0.9);
+    
+    // Calculer la position X et Y
+    const randomX = Math.cos(angle) * randomRadius;
+    const randomY = Math.sin(angle) * randomRadius;
+    
+    // Position Z négative (loin du joueur dans la profondeur)
+    const randomZ = -150 - Math.random() * 50; // Entre -150 et -200
+    
+    // Si une position est déjà spécifiée, l'utiliser pour X et Y, mais conserver Z loin du joueur
+    if (position) {
+      position = new THREE.Vector3(position.x, position.y, randomZ);
     } else {
-      // Si une position est fournie, s'assurer que la coordonnée Z est à 0
-      position.z = 0;
+      position = new THREE.Vector3(randomX, randomY, randomZ);
     }
     
     let planet: Planet3D;
@@ -608,53 +1208,64 @@ export default class GameEngine3D {
       planet = new Planet3D(this.scene, type, position);
     }
     
-    // S'assurer que la planète a une vitesse qui varie en fonction de sa taille et de la difficulté
-    const speedVariation = 0.8 + Math.random() * 0.4; // 80% à 120% de la vitesse normale
-    const difficultyBoost = 1.0 + this.difficulty * 0.1; // Augmente avec la difficulté
-    planet.adjustVelocity(speedVariation * difficultyBoost);
+    // Ajuster la vitesse en fonction de la difficulté
+    const difficultyBoost = 1.0 + this.difficulty * 0.1;
+    planet.adjustVelocity(difficultyBoost);
     
     this.planets.push(planet);
   }
   
   /**
-   * Fait apparaître un bonus de type aléatoire à une position aléatoire
+   * Fait apparaître un bonus de type aléatoire depuis le trou central de l'effet d'hypervitesse
    */
-  private spawnRandomBonus(): void {
-    // Sélection aléatoire du type de bonus
-    const bonusTypes = [
-      BonusType3D.POINTS,
-      BonusType3D.SHIELD,
-      BonusType3D.SLOWTIME,
-      BonusType3D.EXTRALIFE
-    ];
-    
-    // Pondération des types de bonus
-    // Points: 50%, Bouclier: 20%, Ralentissement: 20%, Vie supplémentaire: 10%
-    let typeIndex: number;
-    const rand = Math.random();
-    
-    if (rand < 0.5) {
-      typeIndex = 0; // POINTS
-    } else if (rand < 0.7) {
-      typeIndex = 1; // SHIELD
-    } else if (rand < 0.9) {
-      typeIndex = 2; // SLOWTIME
-    } else {
-      typeIndex = 3; // EXTRALIFE
+  private spawnRandomBonus(position?: THREE.Vector3): void {
+    // Si le jeu n'est pas actif ou si le temps minimal pour afficher les bonus n'est pas atteint, sortir
+    if (!this.isRunning || this.isPaused || this.lastTime < 10000) {
+      return; // Sortir sans générer de bonus
     }
+
+    // Type de bonus aléatoire
+    const bonusTypes = [BonusType3D.POINTS, BonusType3D.SHIELD, BonusType3D.SLOWTIME, BonusType3D.EXTRALIFE];
+    const randomType = bonusTypes[Math.floor(Math.random() * bonusTypes.length)];
+
+    // Définir les paramètres de la zone de spawn
+    const spawnRadius = 15; // Zone de spawn dans le trou du vaisseau
+
+    // Générer une position aléatoire dans la zone de spawn
+    const angle = Math.random() * Math.PI * 2; // Angle aléatoire (0-360 degrés)
+
+    // Rayon aléatoire pour la distribution des bonus
+    // Plus proche du centre pour être plus facile à attraper
+    const randomRadius = Math.random() * (spawnRadius * 0.7);
+
+    // Calculer la position X et Y
+    const randomX = Math.cos(angle) * randomRadius;
+    const randomY = Math.sin(angle) * randomRadius;
+
+    // Position Z négative (loin du joueur dans la profondeur)
+    const randomZ = -150 - Math.random() * 50; // Entre -150 et -200
     
-    const bonusType = bonusTypes[typeIndex];
-    
-    // Position aléatoire (en haut de l'écran)
-    const posX = (Math.random() - 0.5) * 30;
-    const posY = 25 + Math.random() * 5;
-    const posZ = 0; // Même niveau Z que le vaisseau
-    
-    this.spawnBonus(bonusType, new THREE.Vector3(posX, posY, posZ));
+    // Si une position est spécifiée, l'utiliser pour X et Y, mais conserver Z loin du joueur
+    if (position) {
+      position = new THREE.Vector3(position.x, position.y, randomZ);
+    } else {
+      position = new THREE.Vector3(randomX, randomY, randomZ);
+    }
+
+    // Créer un bonus à cette position avec le type sélectionné
+    const bonus = new Bonus3D(this.scene, randomType, new THREE.Vector3(randomX, randomY, randomZ));
+
+    // Ajuster la vitesse du bonus en fonction de la difficulté
+    const difficultyBoost = 1.0 + this.difficulty * 0.1;
+    bonus.adjustVelocity(difficultyBoost);
+
+    // Ajouter le bonus à la liste des bonus actifs
+    this.bonuses.push(bonus);
   }
   
   /**
    * Crée ou récupère un bonus du pool et l'ajoute à la scène
+   * Le bonus apparaît uniquement dans le trou central et sur le plan Z=0
    */
   private spawnBonus(type: BonusType3D, position: THREE.Vector3): void {
     let bonus: Bonus3D;
@@ -668,6 +1279,30 @@ export default class GameEngine3D {
       // Créer un nouveau bonus
       bonus = new Bonus3D(this.scene, type, position);
     }
+    
+    // S'assurer que la position Z est adaptée à la position du vaisseau
+    if (this.ship) {
+      // Positionner le bonus loin devant le vaisseau
+      position.z = this.ship.position.z - 180;
+    } else {
+      // Position par défaut si le vaisseau n'existe pas encore
+      position.z = -150;
+    }
+    
+    // Mettre à jour la position du bonus
+    bonus.position = position;
+    
+    // Ajuster la vitesse pour que les bonus se déplacent à la même vitesse que les planètes
+    const speed = 8; // Vitesse constante pour un mouvement fluide
+    
+    // Direction simple vers le joueur (axe Z positif)
+    const direction = new THREE.Vector3(0, 0, 1);
+    
+    // Assigner cette direction au bonus
+    bonus.setDirection(direction);
+    
+    // Appliquer la vitesse au bonus
+    bonus.setSpeed(speed);
     
     this.bonuses.push(bonus);
   }
@@ -800,6 +1435,12 @@ export default class GameEngine3D {
       if (planet.getActive() && this.ship.isCollidingWith(planet)) {
         this.handleCollision(planet);
         break; // Une seule collision à la fois
+      } else if (planet.getActive() && planet.position.z > this.ship.position.z) {
+        // Ajouter des points pour avoir esquivé la planète
+        this.score += 10;
+        this.onScoreUpdate(this.score)
+        console.log('Points gagnés pour esquiver une planète!');
+        planet.setActive(false); // Désactiver la planète après l'esquive
       }
     }
   }
@@ -811,6 +1452,11 @@ export default class GameEngine3D {
     // Retirer des points
     this.score = Math.max(0, this.score - planet.getPointValue());
     this.onScoreUpdate(this.score);
+    
+    // Mettre également à jour le ScoreManager si disponible
+    if (this.scoreManager) {
+      this.scoreManager.updateCurrentScore(this.score);
+    }
     
     // Perdre une vie
     this.lives--;
@@ -835,6 +1481,12 @@ export default class GameEngine3D {
    */
   private gameOver(): void {
     this.stop();
+    
+    // S'assurer que le ScoreManager a la valeur finale correcte
+    if (this.scoreManager) {
+      this.scoreManager.updateCurrentScore(this.score);
+    }
+    
     this.onGameOver(this.score);
   }
   

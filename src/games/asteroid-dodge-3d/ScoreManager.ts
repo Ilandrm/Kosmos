@@ -81,4 +81,17 @@ export default class ScoreManager {
   getCurrentScore(): number {
     return this.currentScore;
   }
+
+  /**
+   * Ajoute un score élevé et l'enregistre s'il est valide.
+   * @param name Nom du joueur
+   */
+  addHighScore(name: string): void {
+    const score = this.getCurrentScore();
+    if (this.saveScore(name, score)) {
+      console.log(`Score de ${name} sauvegardé avec succès : ${score}`);
+    } else {
+      console.log(`Le score de ${name} n'est pas un high score.`);
+    }
+  }
 }

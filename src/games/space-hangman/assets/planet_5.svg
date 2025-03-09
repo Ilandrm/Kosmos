@@ -1,0 +1,62 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="planetGradient" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#b71c1c" />
+      <stop offset="85%" stop-color="#7f0000" />
+      <stop offset="100%" stop-color="#5f0000" />
+    </radialGradient>
+    <filter id="crack-glow">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="fragment-glow">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="inner-lava">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Main planet body, fractured -->
+  <path d="M100,20 A80,80 0 0,1 177,83 L160,90 A65,65 0 0,0 100,35 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  <path d="M177,83 A80,80 0 0,1 150,160 L135,150 A65,65 0 0,0 160,90 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  <path d="M150,160 A80,80 0 0,1 60,175 L65,160 A65,65 0 0,0 135,150 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  <path d="M60,175 A80,80 0 0,1 20,100 L35,100 A65,65 0 0,0 65,160 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  <path d="M20,100 A80,80 0 0,1 60,30 L70,40 A65,65 0 0,0 35,100 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  <path d="M60,30 A80,80 0 0,1 100,20 L100,35 A65,65 0 0,0 70,40 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="2" />
+  
+  <!-- Lava cracks -->
+  <path d="M30,100 Q60,80 80,100 Q100,120 120,100 Q140,80 170,100" 
+        fill="none" stroke="#ff8a80" stroke-width="3" opacity="0.8" filter="url(#crack-glow)" />
+  <path d="M30,100 Q60,80 80,100 Q100,120 120,100 Q140,80 170,100" 
+        fill="none" stroke="#ff3d00" stroke-width="5" opacity="0.6" />
+  
+  <path d="M100,30 Q80,60 100,80 Q120,100 100,120 Q80,140 100,170" 
+        fill="none" stroke="#ff8a80" stroke-width="3" opacity="0.8" filter="url(#crack-glow)" />
+  <path d="M100,30 Q80,60 100,80 Q120,100 100,120 Q80,140 100,170" 
+        fill="none" stroke="#ff3d00" stroke-width="5" opacity="0.6" />
+  
+  <!-- Molten core exposed -->
+  <circle cx="100" cy="100" r="25" fill="#ff3d00" opacity="0.7" filter="url(#inner-lava)" />
+  <circle cx="100" cy="100" r="15" fill="#ffccbc" opacity="0.8" />
+  
+  <!-- Fragments breaking off -->
+  <path d="M145,60 Q150,50 160,55 Q170,60 165,70 Q160,80 150,75 Q140,70 145,60 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M40,120 Q30,115 25,125 Q20,135 30,140 Q40,145 45,135 Q50,125 40,120 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M100,30 Q90,20 85,10 Q80,0 90,5 Q100,10 105,20 Q110,30 100,30 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M170,130 Q180,125 190,130 Q200,135 195,145 Q190,155 180,150 Q170,145 170,130 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="1" filter="url(#fragment-glow)" />
+  <path d="M30,50 Q20,45 10,50 Q0,55 5,65 Q10,75 20,70 Q30,65 30,50 Z" 
+        fill="url(#planetGradient)" stroke="#5f0000" stroke-width="1" filter="url(#fragment-glow)" />
+</svg>

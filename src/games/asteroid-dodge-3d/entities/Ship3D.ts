@@ -6,12 +6,14 @@ export default class Ship3D extends GameObject3D {
   public isInvulnerable: boolean = false;
   private invulnerabilityTimer: number = 0;
   private invulnerabilityDuration: number = 1500; // ms
-  private movementSpeed: number = 15;
+  private movementSpeed: number = 30; // Augmenté de 20 à 30 pour des contrôles plus réactifs
   private thrusterParticles: THREE.Points | null = null;
   private particleSystem: THREE.BufferGeometry | null = null;
   private particleMaterial: THREE.PointsMaterial | null = null;
-  private particleCount: number = 100;
+  private particleCount: number = 40; // Réduit de 100 à 40 pour améliorer les performances
   private particles: Float32Array | null = null;
+  private particleUpdateSkip: number = 0; // Pour mettre à jour les particules moins fréquemment
+  private modelLoaded: boolean = false; // Indicateur si le modèle est chargé
   
   // Contrôles du vaisseau
   private inputState = {
@@ -21,16 +23,22 @@ export default class Ship3D extends GameObject3D {
     moveDown: false
   };
   
-  // Position cible pour le contrôle à la souris
+  // Positions cibles pour le contrôle à la souris
   private targetX: number | null = null;
+  private targetY: number | null = null;
   
   // Limites de mouvement
   private bounds = {
     minX: -20,
     maxX: 20,
-    minY: -8,  // Limite le mouvement à la partie basse de l'écran
-    maxY: -8   // Fixe le vaisseau à une position Y constante
+    minY: -15,  // Limite inférieure pour le mouvement vertical
+    maxY: 50,   // Limite supérieure fortement augmentée pour permettre d'aller jusqu'en haut de l'écran
+    minZ: -200, // Limite arrière pour le mouvement en Z (loin en profondeur)
+    maxZ: 30    // Limite avant pour le mouvement en Z (près du joueur)
   };
+  
+  // Vitesse de déplacement sur l'axe Z (non utilisée dans cette configuration)
+  private zMovementSpeed: number = 0;
   
   constructor(scene: THREE.Scene) {
     // Créer un groupe temporaire pour le vaisseau en attendant le chargement du modèle
@@ -40,15 +48,41 @@ export default class Ship3D extends GameObject3D {
     
     // Définir le rayon de collision et la position initiale
     this.boundingRadius = 1.5;
-    this.position = new THREE.Vector3(0, 0, 0);
+    this.position = new THREE.Vector3(0, -8, 0); // Position initiale à Y=-8 (bas de l'écran) et Z=0
+    
+    // S'assurer que les targets sont null au départ pour éviter les mouvements automatiques
+    this.targetX = null;
+    this.targetY = null;
+    
+    // Initialiser la vélocité à zéro pour éviter des mouvements aléatoires au démarrage
+    this.velocity = new THREE.Vector3(0, 0, 0);
+    
+    // Réinitialiser explicitement tous les états d'entrée à false
+    this.inputState = {
+      moveLeft: false,
+      moveRight: false,
+      moveUp: false,
+      moveDown: false
+    };
     
     // Charger le modèle GLB
     this.loadShipModel();
     
     // Créer le système de particules pour l'effet de propulsion
     this.initThrusterParticles();
+    
+    // Mettre en place les écouteurs d'événements pour les contrôles
+    this.setupEventListeners();
   }
   
+  /**
+   * Vérifie si le modèle du vaisseau est complètement chargé
+   * @returns true si le modèle est chargé, false sinon
+   */
+  public isReady(): boolean {
+    return this.modelLoaded;
+  }
+
   /**
    * Charge le modèle 3D du vaisseau à partir d'un fichier GLB
    */
@@ -65,24 +99,54 @@ export default class Ship3D extends GameObject3D {
         // Déterminer l'échelle et l'orientation appropriées pour le modèle
         const model = gltf.scene;
         
-        // Ajuster la taille du modèle (augmentation de l'échelle)
-        model.scale.set(3.0, 3.0, 3.0);
+        // Ajuster la taille du modèle (augmentation de l'échelle - vaisseau plus gros)
+        model.scale.set(4.5, 4.5, 4.5);
         
         // Ajuster la rotation pour que le vaisseau pointe dans la bonne direction
+        // et reste droit (ne s'incline pas sur les côtés)
         model.rotation.y = Math.PI; // Tourner de 180 degrés si nécessaire
+        model.rotation.z = 0; // Fixer la rotation Z pour empêcher l'inclinaison latérale
         
         // S'assurer que le modèle est à Z=0
         model.position.z = 0;
         
-        // Parcourir tous les maillages pour configurer correctement les matériaux
+        // Optimiser le modèle pour de meilleures performances
         model.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            // Activer les ombres
-            child.castShadow = true;
-            child.receiveShadow = true;
+            // Désactiver les ombres pour améliorer les performances
+            child.castShadow = false;
+            child.receiveShadow = false;
             
-            // S'assurer que le maillage utilise correctement la profondeur
+            // Améliorer la clarté et la visibilité du vaisseau
             if (child.material) {
+              // Réduire la qualité des textures pour améliorer les performances
+              if (child.material.map) {
+                child.material.map.anisotropy = 1;
+                child.material.map.minFilter = THREE.LinearFilter;
+              }
+              
+              // Désactiver les effets avancés
+              if (child.material.envMap) child.material.envMap = null;
+              
+              // Augmenter la luminosité du vaisseau
+              if (child.material instanceof THREE.MeshStandardMaterial) {
+                // Diminuer l'émission pour un effet plus subtil
+                child.material.emissive = new THREE.Color(0x333344);
+                child.material.emissiveIntensity = 0.4;
+                
+                // Réduire les réflexions pour un aspect moins brillant
+                child.material.metalness = 0.5;
+                child.material.roughness = 0.4;
+                
+                // Conserver la couleur de base avec un éclaircissement modéré
+                if (!child.material.color.equals(new THREE.Color(0xffffff))) {
+                  // Rendre légèrement plus clair sans exagérer
+                  child.material.color.r = Math.min(1, child.material.color.r * 1.2);
+                  child.material.color.g = Math.min(1, child.material.color.g * 1.2);
+                  child.material.color.b = Math.min(1, child.material.color.b * 1.2);
+                }
+              }
+              
               child.material.depthWrite = true;
               child.material.depthTest = true;
             }
@@ -93,8 +157,8 @@ export default class Ship3D extends GameObject3D {
         this.mesh.clear(); // Supprimer le contenu actuel
         this.mesh.add(model); // Ajouter le modèle GLB
         
-        // Mettre à jour le rayon de collision si nécessaire après avoir examiné le modèle
-        // this.boundingRadius = ...; // Ajuster en fonction de la taille réelle du modèle
+        // Indiquer que le modèle est maintenant chargé
+        this.modelLoaded = true;
       },
       
       // Callback de progression (optionnel)
@@ -108,6 +172,9 @@ export default class Ship3D extends GameObject3D {
         
         // Créer un vaisseau de secours simple en cas d'échec de chargement
         this.createFallbackShip();
+        
+        // Même avec le vaisseau de secours, marquer comme chargé
+        this.modelLoaded = true;
       }
     );
   }
@@ -116,10 +183,12 @@ export default class Ship3D extends GameObject3D {
    * Crée un vaisseau de secours simple en cas d'échec de chargement du modèle GLB
    */
   private createFallbackShip(): void {
-    // Matériau simple pour le vaisseau de secours
+    // Matériau plus lumineux pour le vaisseau de secours
     const material = new THREE.MeshStandardMaterial({ 
-      color: 0x3498db,
-      metalness: 0.7,
+      color: 0x66aaff,
+      metalness: 0.6,
+      emissive: 0x4466aa,
+      emissiveIntensity: 0.7,
       roughness: 0.3
     });
     
@@ -134,7 +203,7 @@ export default class Ship3D extends GameObject3D {
   }
   
   private initThrusterParticles(): void {
-    // Géométrie pour les particules
+    // Géométrie pour les particules avec nombre réduit
     this.particleSystem = new THREE.BufferGeometry();
     this.particles = new Float32Array(this.particleCount * 3);
     
@@ -143,19 +212,20 @@ export default class Ship3D extends GameObject3D {
       const i3 = i * 3;
       this.particles[i3] = (Math.random() * 0.4) - 0.2; // x
       this.particles[i3 + 1] = (Math.random() * 0.5) - 2; // y (derrière le vaisseau)
-      this.particles[i3 + 2] = 0; // z = 0 pour aligner avec le vaisseau
+      this.particles[i3 + 2] = -1; // z légèrement derrière le vaisseau pour l'effet de propulsion
     }
     
     this.particleSystem.setAttribute('position', new THREE.BufferAttribute(this.particles, 3));
     
-    // Matériau pour les particules (brillant et coloré)
+    // Matériau plus lumineux pour les particules du vaisseau
     this.particleMaterial = new THREE.PointsMaterial({
-      color: 0x3dffff,
-      size: 0.2,
+      color: 0x80dfff, // Couleur plus claire et vive
+      size: 0.4, // Particules légèrement plus grandes
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.95, // Plus opaque pour une meilleure visibilité
       blending: THREE.AdditiveBlending,
-      sizeAttenuation: true
+      sizeAttenuation: false, // Désactivation pour améliorer les performances
+      depthWrite: false // Améliorer les performances
     });
     
     // Créer le système de points
@@ -168,7 +238,11 @@ export default class Ship3D extends GameObject3D {
    * @param deltaTime Temps écoulé depuis la dernière frame en secondes
    */
   update(deltaTime: number): void {
-    super.update(deltaTime);
+    if (!this.mesh) return;
+    
+    // Ne pas forcer la position Z à 0 pour permettre le mouvement vertical
+    // this.mesh.position.z = 0;
+    // this.position.z = 0;
     
     // Gérer l'invulnérabilité
     if (this.isInvulnerable) {
@@ -186,81 +260,175 @@ export default class Ship3D extends GameObject3D {
       }
     }
     
-    // Traiter les entrées pour déplacer le vaisseau
+    // IMPORTANT: Gérer les mouvements uniquement par les contrôles utilisateur
+    // Aucun mouvement automatique ne doit se produire
     this.handleMovement(deltaTime);
     
     // Animer les particules du propulseur
     this.updateThrusterParticles(deltaTime);
+    
+    // FINAL: Vérification finale pour s'assurer que Z reste à 0
+    // this.mesh.position.z = 0;
+    // this.position.z = 0;
+    // if (this.velocity) this.velocity.z = 0;
   }
   
   /**
-   * Met à jour l'effet de particules du propulseur
+   * Maintient le vaisseau à une position Z fixe
+   * @param deltaTime Temps écoulé depuis la dernière frame
+   */
+  private fixPositionZ(deltaTime: number): void {
+    // IMPORTANT: Cette méthode ne fait PLUS avancer le vaisseau
+    // Elle s'assure uniquement que la position Z reste à 0
+    if (!this.mesh) return;
+    
+    // Ne pas forcer la position Z à 0 pour permettre le mouvement vertical
+    // this.mesh.position.z = 0;
+    // this.position.z = 0;
+    
+    // S'assurer qu'aucune force ne peut déplacer le vaisseau sur l'axe Z
+    // if (this.velocity) {
+    //   this.velocity.z = 0;
+    // }
+  }
+  
+  /**
+   * Met à jour l'effet de particules du propulseur moins fréquemment
    */
   private updateThrusterParticles(deltaTime: number): void {
     if (!this.particles || !this.particleSystem) return;
     
-    // Mouvement des particules
-    for (let i = 0; i < this.particleCount; i++) {
+    // Utiliser un intervalle fixe pour une mise à jour plus stable
+    this.particleUpdateSkip++;
+    if (this.particleUpdateSkip < 3) { // Réduit de 4 à 3 pour un peu plus de fluidité
+      return;
+    }
+    this.particleUpdateSkip = 0;
+    
+    // Utilisation d'un buffer temporaire et mise à jour partielle
+    let needsUpdate = false;
+    
+    // Utiliser une portion fixe des particules pour plus de stabilité
+    const updateCount = Math.floor(this.particleCount / 3);
+    const startIdx = 0;
+    const endIdx = updateCount;
+    
+    for (let i = startIdx; i < endIdx; i++) {
       const i3 = i * 3;
       
-      // Déplacer la particule vers le bas
-      this.particles[i3 + 1] -= (Math.random() * 5 + 2) * deltaTime;
-      
-      // Ajouter un peu de mouvement horizontal aléatoire
-      this.particles[i3] += (Math.random() * 0.2 - 0.1) * deltaTime;
-      this.particles[i3 + 2] += (Math.random() * 0.2 - 0.1) * deltaTime;
+      // Utiliser des valeurs fixes de déplacement pour plus de stabilité
+      this.particles[i3 + 1] -= 0.05; // Déplacement vertical plus lent
+      this.particles[i3 + 2] -= 0.03; // Déplacement en Z plus lent
       
       // Réinitialiser la particule si elle est trop loin
-      if (this.particles[i3 + 1] < -3) {
+      if (this.particles[i3 + 1] < -3 || this.particles[i3 + 2] < -4) {
         this.particles[i3] = (Math.random() * 0.4) - 0.2; // x
         this.particles[i3 + 1] = -1.2; // y (derrière le vaisseau)
-        this.particles[i3 + 2] = 0; // z = 0 pour aligner avec le vaisseau
+        this.particles[i3 + 2] = -1; // z légèrement derrière le vaisseau
+        needsUpdate = true;
       }
     }
     
-    // Mettre à jour la géométrie des particules
-    this.particleSystem.setAttribute('position', new THREE.BufferAttribute(this.particles, 3));
-    this.particleSystem.attributes.position.needsUpdate = true;
+    // Mettre à jour la géométrie des particules seulement si nécessaire
+    if (needsUpdate) {
+      this.particleSystem.setAttribute('position', new THREE.BufferAttribute(this.particles, 3));
+      this.particleSystem.attributes.position.needsUpdate = true;
+    }
   }
   
   /**
    * Déplace le vaisseau en fonction des entrées
    */
   private handleMovement(deltaTime: number): void {
+    if (!this.mesh) return;
+    
+    // Ne pas forcer la position Z à 0 pour permettre le mouvement vertical
+    // this.mesh.position.z = 0;
+    // this.position.z = 0;
+    // if (this.velocity) this.velocity.z = 0;
+    
+    // Sécurité: limiter deltaTime pour éviter les mouvements saccadés
+    if (isNaN(deltaTime) || !isFinite(deltaTime) || deltaTime > 0.1) {
+      deltaTime = 0.016; // environ 60 FPS
+    }
+    
+    // ÉTAPE 2: Par défaut, PAS DE MOUVEMENT
+    // C'est la clé pour éviter les mouvements automatiques
     let moveX = 0;
-    // Le mouvement Y est désormais ignoré pour limiter le mouvement à l'axe horizontal
     let moveY = 0;
+    let moveZ = 0; // Ajout de la variable moveZ pour le mouvement vertical
+    let hasUserInput = false; // Indicateur crucial pour détecter une action utilisateur
     
-    // Contrôle par clavier
-    if (this.inputState.moveLeft) moveX -= 1;
-    if (this.inputState.moveRight) moveX += 1;
+    // ÉTAPE 3: Détecter les contrôles clavier (action utilisateur explicite)
+    if (this.inputState.moveLeft) { moveX -= 1; hasUserInput = true; }
+    if (this.inputState.moveRight) { moveX += 1; hasUserInput = true; }
+    if (this.inputState.moveUp) { moveY += 1; moveZ += 1; hasUserInput = true; } // Ajout de moveZ pour le mouvement vertical
+    if (this.inputState.moveDown) { moveY -= 1; moveZ -= 1; hasUserInput = true; } // Ajout de moveZ pour le mouvement vertical
     
-    // Contrôle par souris si une position cible est définie
+    // ÉTAPE 4: Traiter les targets de souris UNIQUEMENT s'ils sont explicitement définis par l'utilisateur
+    // Réduire le seuil pour rendre le mouvement plus fluide et précis
+    const minThreshold = 0.1; // Seuil réduit pour plus de réactivité
+    
     if (this.targetX !== null) {
-      // Calculer la différence entre la position actuelle et la cible
-      const diff = this.targetX - this.mesh.position.x;
-      const threshold = 0.3; // Zone de "deadzone" pour éviter les oscillations
-      
-      if (Math.abs(diff) > threshold) {
-        // Déplacer vers la cible avec une vitesse proportionnelle à la distance
-        moveX = Math.sign(diff) * Math.min(1.0, Math.abs(diff) / 3.0);
-      }
+      const diffX = this.targetX - this.mesh.position.x;
+      // Mouvement plus direct pour éviter les vibrations
+      moveX = Math.sign(diffX) * Math.min(Math.abs(diffX) / 5, 1.0);
+      hasUserInput = true; // Marquer comme entrée utilisateur
     }
     
-    // Normaliser le vecteur de mouvement pour une vitesse constante si nécessaire
-    if (moveX !== 0) {
-      moveX = moveX / Math.abs(moveX);
+    if (this.targetY !== null) {
+      const diffY = this.targetY - this.mesh.position.y;
+      // Mouvement plus direct pour éviter les vibrations
+      moveY = Math.sign(diffY) * Math.min(Math.abs(diffY) / 5, 1.0);
+      hasUserInput = true; // Marquer comme entrée utilisateur
     }
     
-    // Appliquer le mouvement horizontal uniquement
-    const newX = this.mesh.position.x + moveX * this.movementSpeed * deltaTime;
+    // ÉTAPE 5: CRUCIAL - Sortir IMMÉDIATEMENT s'il n'y a pas d'entrée utilisateur
+    // C'est ce qui garantit absolument qu'il n'y aura AUCUN mouvement automatique
+    if (!hasUserInput || (moveX === 0 && moveY === 0 && moveZ === 0)) {
+      return;
+    }
     
-    // Limiter la position dans les limites horizontales
-    this.mesh.position.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, newX));
+    // Normaliser le vecteur de mouvement pour éviter les accélérations en diagonale
+    const magnitude = Math.sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
+    if (magnitude > 1) {
+      moveX /= magnitude;
+      moveY /= magnitude;
+      moveZ /= magnitude;
+    }
     
-    // Incliner légèrement le vaisseau dans la direction du mouvement horizontal
-    const targetRotationZ = moveX * -0.3;
-    this.mesh.rotation.z += (targetRotationZ - this.mesh.rotation.z) * 5 * deltaTime;
+    // Vitesse de base du vaisseau augmentée pour plus de réactivité
+    const speed = 20;
+    
+    // Calculer les nouvelles positions avec une légère interpolation pour lisser le mouvement
+    // Cette approche évite les vibrations en rendant le mouvement plus progressif
+    const targetX = this.mesh.position.x + moveX * speed * deltaTime;
+    const targetY = this.mesh.position.y + moveY * speed * deltaTime;
+    const targetZ = this.mesh.position.z + moveZ * speed * deltaTime; // Ajout de la variable targetZ pour le mouvement vertical
+    
+    // Appliquer les limites sur les deux axes
+    const constrainedX = Math.min(this.bounds.maxX, Math.max(this.bounds.minX, targetX));
+    const constrainedY = Math.min(this.bounds.maxY, Math.max(this.bounds.minY, targetY));
+    const constrainedZ = Math.min(this.bounds.maxZ, Math.max(this.bounds.minZ, targetZ)); // Ajout de la variable constrainedZ pour le mouvement vertical
+    
+    // Lisser le mouvement pour éviter les vibrations, tout en gardant une bonne réactivité
+    const smoothingFactor = 0.8; // Augmenté de 0.7 à 0.8 pour des mouvements plus directs
+    const finalX = this.mesh.position.x + (constrainedX - this.mesh.position.x) * smoothingFactor;
+    const finalY = this.mesh.position.y + (constrainedY - this.mesh.position.y) * smoothingFactor;
+    const finalZ = this.mesh.position.z + (constrainedZ - this.mesh.position.z) * smoothingFactor; // Ajout de la variable finalZ pour le mouvement vertical
+    
+    // Mettre à jour la position
+    this.mesh.position.x = finalX;
+    this.mesh.position.y = finalY;
+    this.mesh.position.z = finalZ; // Ajout de la mise à jour de la position Z
+    
+    this.position.x = finalX;
+    this.position.y = finalY;
+    this.position.z = finalZ; // Ajout de la mise à jour de la position Z
+    
+    // Effet d'inclinaison en fonction du mouvement horizontal
+    const targetTiltZ = -moveX * 0.3;
+    this.mesh.rotation.z += (targetTiltZ - this.mesh.rotation.z) * 3 * deltaTime;
   }
   
   /**
@@ -290,10 +458,18 @@ export default class Ship3D extends GameObject3D {
   /**
    * Gestionnaire d'événements pour les touches enfoncées
    */
+  /**
+   * Met en place les écouteurs d'événements pour les contrôles
+   */
+  private setupEventListeners(): void {
+    // On ajoute des écouteurs d'événements seulement sur la fenêtre pour éviter les duplications
+    window.addEventListener('keydown', this.handleKeyDown.bind(this));
+    window.addEventListener('keyup', this.handleKeyUp.bind(this));
+    console.log('Écouteurs d\'événements configurés pour le vaisseau');
+  }
+
   handleKeyDown(event: KeyboardEvent): void {
-    // Désactivé pour privilégier le contrôle à la souris
-    // On laisse le code commenté au cas où on voudrait réactiver les contrôles clavier
-    /*
+    // RÉACTIVATION des contrôles clavier
     switch (event.key) {
       case 'ArrowLeft':
       case 'a':
@@ -316,16 +492,13 @@ export default class Ship3D extends GameObject3D {
         this.inputState.moveDown = true;
         break;
     }
-    */
   }
   
   /**
    * Gestionnaire d'événements pour les touches relâchées
    */
   handleKeyUp(event: KeyboardEvent): void {
-    // Désactivé pour privilégier le contrôle à la souris
-    // On laisse le code commenté au cas où on voudrait réactiver les contrôles clavier
-    /*
+    // RÉACTIVATION des contrôles clavier
     switch (event.key) {
       case 'ArrowLeft':
       case 'a':
@@ -348,15 +521,77 @@ export default class Ship3D extends GameObject3D {
         this.inputState.moveDown = false;
         break;
     }
-    */
   }
   
   /**
    * Définit la position cible X pour le contrôle à la souris
    * @param x La position X cible dans l'espace 3D
+   * @param isDragging Si true, le vaisseau suivra la position de la souris. Si false, la cible sera ignorée.
    */
-  setTargetX(x: number): void {
-    this.targetX = x;
+  setTargetX(x: number, isDragging: boolean = false): void {
+    // IMPORTANT: Ne mettre à jour la cible QUE si isDragging est true
+    // Cela empêche le vaisseau de bouger tout seul sans action humaine
+    if (isDragging) {
+      this.targetX = x;
+    } else {
+      // TOUJOURS annuler la cible quand on ne glisse pas pour empêcher les mouvements automatiques
+      this.targetX = null;
+    }
+  }
+  
+  /**
+   * Définit la position cible Y pour le contrôle à la souris
+   * @param y La position Y cible dans l'espace 3D
+   * @param isDragging Si true, le vaisseau suivra la position de la souris. Si false, la cible sera ignorée.
+   */
+  setTargetY(y: number, isDragging: boolean = false): void {
+    // IMPORTANT: Ne mettre à jour la cible QUE si isDragging est true
+    // Cela empêche le vaisseau de bouger tout seul sans action humaine
+    if (isDragging) {
+      this.targetY = y;
+    } else {
+      // TOUJOURS annuler la cible quand on ne glisse pas pour empêcher les mouvements automatiques
+      this.targetY = null;
+    }
+  }
+  
+  /**
+   * Définit directement la position X du vaisseau sans passer par le système de cible
+   * Cette méthode est utilisée pour le contrôle par glisser-déposer
+   * @param x Nouvelle position X du vaisseau (limitée par les bornes min/max)
+   */
+  setPositionX(x: number): void {
+    try {
+      // Limiter la position aux bornes définies
+      const clampedX = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, x));
+      
+      // Mettre à jour directement la position du vaisseau
+      // Utiliser une légère interpolation pour adoucir le mouvement
+      const currentX = this.mesh.position.x;
+      const smoothX = currentX + (clampedX - currentX) * 0.7;
+      
+      this.mesh.position.x = smoothX;
+      this.position.x = smoothX;
+      
+      // Mettre à jour l'inclinaison du vaisseau en fonction de sa position
+      this.updateTilt();
+    } catch (error) {
+      console.error('Erreur lors du déplacement du vaisseau:', error);
+    }
+  }
+  
+  /**
+   * Met à jour l'inclinaison du vaisseau en fonction de sa position horizontale
+   * pour donner un effet visuel de virage
+   */
+  private updateTilt(): void {
+    // Réduire fortement l'inclinaison pour que le vaisseau reste presque droit
+    // Calculer un angle d'inclinaison minimal basé sur la position X (-20 à 20)
+    // Convertir en un angle de rotation maximum de ±0.05 radians (au lieu de 0.3)
+    const tiltAmount = (this.position.x / this.bounds.maxX) * 0.05;
+    
+    // Appliquer la rotation sur l'axe Z (inclinaison latérale minimale)
+    this.mesh.rotation.z = -tiltAmount; // Négatif pour incliner dans le bon sens
   }
   
   /**
@@ -422,5 +657,19 @@ export default class Ship3D extends GameObject3D {
     
     // Appeler la méthode dispose de la classe parente
     super.dispose();
+  }
+  
+  /**
+   * Vérifie si le vaisseau est proche d'un autre objet
+   * @param otherObject L'objet à vérifier
+   * @param distance La distance maximale pour considérer que l'objet est proche
+   * @returns true si l'objet est proche, false sinon
+   */
+  public isNear(otherObject: GameObject3D, distance: number = 5): boolean {
+    const dx = this.position.x - otherObject.position.x;
+    const dy = this.position.y - otherObject.position.y;
+    const dz = this.position.z - otherObject.position.z;
+    const distanceSquared = dx * dx + dy * dy + dz * dz;
+    return distanceSquared < (distance * distance);
   }
 }

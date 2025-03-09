@@ -21,6 +21,7 @@
         <p>Temps: {{ formattedTime }}</p>
         <button @click="restartGame" class="restart-btn">REJOUER</button>
         <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
+        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
       
       <div v-if="gameState === 'game-over'" class="game-over">
@@ -44,6 +45,10 @@
 import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { useRouter } from 'vue-router';
+import GameFlowService from '../../services/GameFlowService';
+
 // Peut-être d'autres imports nécessaires
 
 export default defineComponent({
@@ -78,6 +83,10 @@ export default defineComponent({
     let friendlyShips: THREE.Object3D[] = [];
     let bullets: THREE.Object3D[] = [];
     let stars: THREE.Points;
+    
+    // Modèle 3D OVNI
+    let ovniModel: THREE.Group | null = null;
+    const ovniScale = 0.8; // Échelle pour correspondre à la taille des soucoupes originales
     
     // Variables du gameplay
     const maxAliens = 10;
@@ -156,15 +165,20 @@ export default defineComponent({
       // Créer le fond avec des étoiles
       createStars();
       
+      // Charger le modèle 3D OVNI
+      loadOvniModel();
+      
       // Enregistrer les gestionnaires d'événements
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mousedown', handleMouseDown);
       window.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('resize', handleResize);
       
-      // Ajouter des vaisseaux
-      scheduleAlienSpawning();
-      scheduleFriendlySpawning();
+      // Ajouter des vaisseaux (après un délai pour s'assurer que le modèle est chargé)
+      setTimeout(() => {
+        scheduleAlienSpawning();
+        scheduleFriendlySpawning();
+      }, 1000);
     }
     
     function createStars() {
@@ -191,49 +205,142 @@ export default defineComponent({
       scene.add(stars);
     }
     
+    // Fonction pour charger le modèle 3D OVNI
+    function loadOvniModel() {
+      const loader = new GLTFLoader();
+      
+      // Essayer plusieurs chemins d'accès possibles au modèle
+      const paths = [
+        './Créer_un_ovni_0306092554_texture (1).glb',
+        '/src/games/alien-hunt-3d/Créer_un_ovni_0306092554_texture (1).glb',
+        '../alien-hunt-3d/Créer_un_ovni_0306092554_texture (1).glb'
+      ];
+      
+      let pathIndex = 0;
+      
+      const tryLoadModel = () => {
+        if (pathIndex >= paths.length) {
+          console.error('Impossible de charger le modèle OVNI après plusieurs tentatives');
+          return;
+        }
+        
+        console.log(`Tentative de chargement du modèle OVNI depuis: ${paths[pathIndex]}`);
+        
+        loader.load(
+          // URL du modèle
+          paths[pathIndex],
+          // Callback appelé quand le modèle est chargé
+          function (gltf) {
+            console.log('Modèle OVNI chargé avec succès:', gltf);
+            ovniModel = gltf.scene;
+            
+            // Analyser la structure du modèle
+            console.log('Structure du modèle:');
+            ovniModel.traverse((child) => {
+              console.log(child.name, child.type, child.isMesh ? 'Mesh' : '');
+            });
+            
+            // Mettre à l'échelle le modèle à une taille appropriée
+            ovniModel.scale.set(ovniScale, ovniScale, ovniScale);
+            
+            // Ajouter un matériau émissif violet pour le faire briller
+            ovniModel.traverse((node) => {
+              if (node.isMesh) {
+                // Conserver la texture mais ajouter une couleur émissive
+                node.material.emissive = new THREE.Color(0x330066);
+                node.material.emissiveIntensity = 0.5;
+              }
+            });
+            
+            // Cacher le modèle original (utilisé comme template)
+            ovniModel.visible = false;
+            
+            // Créer un vaisseau test pour vérifier le modèle
+            console.log('Création d\'un vaisseau test pour vérifier le modèle');
+            createAlienShip();
+          },
+          // Callback de progression du chargement
+          function (xhr) {
+            console.log(`Chargement du modèle OVNI: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
+          },
+          // Callback d'erreur
+          function (error) {
+            console.error(`Erreur lors du chargement du modèle OVNI depuis ${paths[pathIndex]}:`, error);
+            pathIndex++;
+            tryLoadModel(); // Essayer le prochain chemin
+          }
+        );
+      };
+      
+      // Lancer le chargement du modèle
+      tryLoadModel();
+    }
+    
     function createAlienShip() {
-      // Créer un groupe pour le vaisseau alien
-      const ship = new THREE.Group();
-      
-      // Corps principal - soucoupe
-      const bodyGeometry = new THREE.SphereGeometry(0.8, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-      const bodyMaterial = new THREE.MeshPhongMaterial({
-        color: 0x9933ff,
-        emissive: 0x330066,
-        shininess: 50,
-      });
-      
-      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-      body.scale.set(1, 0.4, 1);
-      ship.add(body);
-      
-      // Partie supérieure - dôme
-      const domeGeometry = new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-      const domeMaterial = new THREE.MeshPhongMaterial({
-        color: 0xb090ff,
-        transparent: true,
-        opacity: 0.7,
-        shininess: 100,
-      });
-      
-      const dome = new THREE.Mesh(domeGeometry, domeMaterial);
-      dome.position.set(0, 0.2, 0);
-      ship.add(dome);
-      
-      // Lumières du vaisseau
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const lightGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-        const lightMaterial = new THREE.MeshPhongMaterial({
-          color: 0xff33ee, 
-          emissive: 0xcc00aa,
+      // Si le modèle 3D n'est pas chargé, créer une soucoupe simple de secours
+      if (!ovniModel) {
+        // Créer un groupe pour le vaisseau alien (backup)
+        const ship = new THREE.Group();
+        
+        // Corps principal - soucoupe
+        const bodyGeometry = new THREE.SphereGeometry(0.8, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const bodyMaterial = new THREE.MeshPhongMaterial({
+          color: 0x9933ff,
+          emissive: 0x330066,
+          shininess: 50,
         });
         
-        const light = new THREE.Mesh(lightGeometry, lightMaterial);
-        const radius = 0.7;
-        light.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
-        ship.add(light);
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.scale.set(1, 0.4, 1);
+        ship.add(body);
+        
+        // Partie supérieure - dôme
+        const domeGeometry = new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeMaterial = new THREE.MeshPhongMaterial({
+          color: 0xb090ff,
+          transparent: true,
+          opacity: 0.7,
+          shininess: 100,
+        });
+        
+        const dome = new THREE.Mesh(domeGeometry, domeMaterial);
+        dome.position.set(0, 0.2, 0);
+        ship.add(dome);
+        
+        // Lumières du vaisseau
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2;
+          const lightGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+          const lightMaterial = new THREE.MeshPhongMaterial({
+            color: 0xff33ee, 
+            emissive: 0xcc00aa
+          });
+          
+          const light = new THREE.Mesh(lightGeometry, lightMaterial);
+          const radius = 0.7;
+          light.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+          ship.add(light);
+        }
+        return finishShipSetup(ship);
       }
+      
+      // Utiliser le modèle 3D OVNI
+      const ship = new THREE.Group();
+      
+      // Cloner le modèle OVNI pour chaque vaisseau
+      const ovniClone = ovniModel.clone();
+      ovniClone.visible = true;
+      
+      // Ajouter une légère animation de rotation pour le modèle
+      ovniClone.rotation.y = Math.random() * Math.PI * 2; // Rotation aléatoire
+      
+      // Ajouter le modèle au groupe du vaisseau
+      ship.add(ovniClone);
+      
+      return finishShipSetup(ship);
+    }
+    
+    function finishShipSetup(ship) {
       
       // Positionnement aléatoire
       const x = THREE.MathUtils.randFloatSpread(shipSpawnRange);
@@ -402,6 +509,15 @@ export default defineComponent({
       
       // Démarrer la boucle d'animation
       animate();
+      
+      // Démarrer le timer pour finir le jeu après 30 secondes
+      let gameTimerId = setTimeout(() => {
+        endGame();
+      }, 30000);
+      
+      onBeforeUnmount(() => {
+        clearTimeout(gameTimerId);
+      });
     }
     
     function restartGame() {
@@ -496,6 +612,12 @@ export default defineComponent({
       window.removeEventListener('mouseup', handleMouseUp);
       
       gameState.value = win ? 'victory' : 'game-over';
+    }
+    
+    function continueToNextGame() {
+      const nextGame = GameFlowService.getNextGame('alien-hunt');
+      const router = useRouter();
+      router.push({ name: nextGame });
     }
     
     // Gestionnaires d'événements
@@ -747,7 +869,8 @@ export default defineComponent({
       startGame,
       restartGame,
       returnToMenu,
-      endGame
+      endGame,
+      continueToNextGame
     };
   }
 });
