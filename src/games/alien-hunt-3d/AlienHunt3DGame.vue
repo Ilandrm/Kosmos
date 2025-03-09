@@ -54,6 +54,7 @@ import GameFlowService from '../../services/GameFlowService';
 export default defineComponent({
   name: 'AlienHunt3DGame',
   setup() {
+    const router = useRouter();
     // État du jeu
     const gameState = ref('menu'); // 'menu', 'playing', 'victory', 'game-over'
     const score = ref(0);
@@ -616,8 +617,19 @@ export default defineComponent({
     
     function continueToNextGame() {
       const nextGame = GameFlowService.getNextGame('alien-hunt');
-      const router = useRouter();
-      router.push({ name: nextGame });
+      if (nextGame) {
+        router.push({ name: nextGame }).catch(err => {
+          console.error('Navigation error:', err);
+        });
+      } else if (isLastGame('alien-hunt')) {
+        router.push('/completion').catch(err => {
+          console.error('Navigation error:', err);
+        });
+      } else {
+        router.push('/').catch(err => {
+          console.error('Navigation error:', err);
+        });
+      }
     }
     
     // Gestionnaires d'événements

@@ -19,6 +19,11 @@
         {{ statusMessage }}
       </div>
       
+      <!-- Compteur de temps -->
+      <div v-if="!timeUp && !gameOver" class="time-left">
+        Temps restant : {{ timeLeft }} secondes
+      </div>
+      
       <!-- Clavier virtuel -->
       <div class="keyboard">
         <button 
@@ -52,7 +57,7 @@
 <script lang="ts">
 import { defineComponent, ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import GameFlowService from '@/services/GameFlowService';
+import { getNextGame, isLastGame } from '@/services/GameFlowService';
 
 export default defineComponent({
   name: 'SpaceHangmanGame',
@@ -79,6 +84,11 @@ export default defineComponent({
     const gameLost = ref(false);
     const timeUp = ref(false);
     const statusMessage = ref('Devinez le mot lié à l\'espace !');
+    const timeLeft = ref(30);
+    const gameStarted = ref(false);
+    const gameOverMessageVisible = ref(false);
+    const score = ref(0);
+    const victoryMessageVisible = ref(false);
     
     // Propriété calculée pour déterminer si le jeu est terminé
     const gameOver = computed(() => gameWon.value || gameLost.value || timeUp.value);
@@ -105,6 +115,7 @@ export default defineComponent({
       gameLost.value = false;
       timeUp.value = false;
       statusMessage.value = 'Devinez le mot lié à l\'espace !';
+      timeLeft.value = 30;
     };
     
     // Fonction pour essayer une lettre
@@ -159,22 +170,33 @@ export default defineComponent({
     
     // Fonction pour continuer au jeu suivant
     const continueToNextGame = () => {
-      const nextGame = GameFlowService.getNextGame('space-hangman');
-      useRouter().push({ name: nextGame });
+      const nextGame = getNextGame('space-hangman');
+      if (nextGame === 'alien-hunt') {
+        window.location.href = '/games/alien-hunt-3d';
+      } else if (nextGame) {
+        window.location.href = `/${nextGame}`;
+      } else if (isLastGame('space-hangman')) {
+        window.location.href = '/completion';
+      } else {
+        window.location.href = '/';
+      }
     };
     
-    const gameTimer = ref<number | null>(null);
+    let gameTimer;
 
     onMounted(() => {
-      gameTimer.value = setTimeout(() => {
-        endGame();
-      }, 30000);
+      gameTimer = setInterval(() => {
+        if (timeLeft.value > 0) {
+          timeLeft.value--;
+        } else {
+          clearInterval(gameTimer);
+          endGame();
+        }
+      }, 1000);
     });
 
     onUnmounted(() => {
-      if (gameTimer.value) {
-        clearTimeout(gameTimer.value);
-      }
+      clearInterval(gameTimer);
     });
 
     function endGame() {
@@ -200,7 +222,12 @@ export default defineComponent({
       tryLetter,
       resetGame,
       planetSrc,
-      continueToNextGame
+      continueToNextGame,
+      timeLeft,
+      gameStarted,
+      gameOverMessageVisible,
+      score,
+      victoryMessageVisible
     };
   }
 });
@@ -415,6 +442,15 @@ div.game-area {
   background-color: #d32f2f;
   transform: scale(1.05);
   box-shadow: 0 0 15px rgba(244, 67, 54, 0.7);
+}
+
+.time-left {
+  font-size: 1.5rem;
+  margin: 1rem 0;
+  padding: 10px;
+  text-align: center;
+  border-radius: 5px;
+  transition: all 0.3s ease;
 }
 
 @media (max-width: 600px) {

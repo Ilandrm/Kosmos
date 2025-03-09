@@ -12,13 +12,12 @@
           <p>Utilisez les touches fléchées pour déplacer votre vaisseau.</p>
           <p>Naviguez à travers le labyrinthe pour atteindre la planète violette!</p>
         </div>
-        <h1>Menu Principal</h1>
-        <router-link to="/space-hangman">Pendu Spatial</router-link>
       </div>
       
       <div v-if="gameState === 'victory'" class="victory">
         <h1>VICTOIRE!</h1>
         <p>Vous avez atteint la planète en {{ formattedTime }}!</p>
+        <button @click="continueToNextGame" class="continue-btn">CONTINUER</button>
         <button @click="restartGame" class="restart-btn">REJOUER</button>
         <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
       </div>
@@ -26,6 +25,7 @@
       <div v-if="gameState === 'game-over'" class="game-over">
         <h1>FIN DU JEU!</h1>
         <p>Vous n'avez pas atteint la planète dans le temps imparti.</p>
+        <p>Temps restant : {{ timeLeft }} secondes</p>
         <button @click="restartGame" class="restart-btn">REJOUER</button>
         <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
       </div>
@@ -34,6 +34,7 @@
     <!-- Game HUD -->
     <div v-if="gameState === 'playing'" class="game-hud">
       <div class="timer">Temps: {{ formattedTime }}</div>
+      <div class="timer">Temps restant : {{ timeLeft }} secondes</div>
     </div>
   </div>
 </template>
@@ -43,6 +44,7 @@ import { defineComponent, ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import Ship3D from './entities/Ship3D';
+import { useRouter } from 'vue-router';
 
 export default defineComponent({
   name: 'Maze3DGame',
@@ -51,6 +53,8 @@ export default defineComponent({
     const gameState = ref('menu'); // 'menu', 'playing', 'victory', 'game-over'
     const gameTime = ref(0);
     const gameTimer = ref<number | null>(null);
+    const timeLeft = ref(30);
+    let gameTimerId;
     
     // Formatage du temps
     const formattedTime = computed(() => {
@@ -481,6 +485,10 @@ export default defineComponent({
       // Démarrer le timer après l'initialisation
       gameTimer.value = window.setInterval(() => {
         gameTime.value++;
+        timeLeft.value--;
+        if (timeLeft.value <= 0) {
+          endGame();
+        }
       }, 1000);
       
       // S'assurer que la position initiale est correctement enregistrée
@@ -494,15 +502,6 @@ export default defineComponent({
       
       // Démarrer la boucle d'animation
       animate();
-      
-      // Définir un timer pour terminer le jeu après 30 secondes
-      let gameTimerId = setTimeout(() => {
-        endGame();
-      }, 30000);
-      
-      onBeforeUnmount(() => {
-        clearTimeout(gameTimerId);
-      });
     }
     
     function restartGame() {
@@ -584,7 +583,7 @@ export default defineComponent({
     }
     
     // Animation et logique de jeu
-    function animate(time: number = 0) {
+    function animate(time: number) {
       animationFrameId = requestAnimationFrame(animate);
       
       if (gameState.value !== 'playing') return;
@@ -599,7 +598,17 @@ export default defineComponent({
       }
       
       // Vérifier si le joueur a atteint le but
-      checkGoal();
+      const shipGoalDistance = ship.position.distanceTo(goal.position);
+      if (shipGoalDistance < 3) { // Adjust this value based on your goal size
+        handleVictory();
+        return;
+      }
+      
+      // Vérifier si le temps est écoulé
+      if (timeLeft.value <= 0) {
+        handleGameOver();
+        return;
+      }
       
       // Mettre à jour la position de la caméra pour suivre le vaisseau
       if (ship && controls) {
@@ -621,117 +630,41 @@ export default defineComponent({
       renderer.render(scene, camera);
     }
     
-    function updateShipPosition() {
-      if (!ship) return;
-      
-      // Réinitialiser la vélocité
-      shipVelocity.set(0, 0, 0);
-      
-      // Rotation du vaisseau
-      if (keysPressed['ArrowLeft']) {
-        ship.rotation.y += shipRotationSpeed;
+    function handleVictory() {
+      cancelAnimationFrame(animationFrameId);
+      if (gameTimer.value) {
+        clearInterval(gameTimer.value);
+        gameTimer.value = null;
       }
-      if (keysPressed['ArrowRight']) {
-        ship.rotation.y -= shipRotationSpeed;
-      }
+      gameState.value = 'victory';
       
-      // Déplacement du vaisseau
-      if (keysPressed['ArrowUp']) {
-        // Ajouter une vitesse en direction de l'avant du vaisseau
-        shipVelocity.x = Math.sin(-ship.rotation.y) * shipSpeed;
-        shipVelocity.z = Math.cos(-ship.rotation.y) * shipSpeed;
-      }
-      if (keysPressed['ArrowDown']) {
-        // Ajouter une vitesse en direction de l'arrière du vaisseau
-        shipVelocity.x = -Math.sin(-ship.rotation.y) * shipSpeed;
-        shipVelocity.z = -Math.cos(-ship.rotation.y) * shipSpeed;
-      }
-      
-      // Sauvegarder la position actuelle au cas où nous devrions revenir en arrière
-      const previousPosition = ship.position.clone();
-      
-      // Mettre à jour la position
-      ship.position.add(shipVelocity);
-      
-      // Vérifier les collisions avec les murs
-      checkWallCollisions(previousPosition);
-      
-      // Mettre à jour la position de la caméra pour qu'elle suive le vaisseau
-      controls.target.copy(ship.position);
-    }
-    
-    function checkWallCollisions(previousPosition: THREE.Vector3) {
-      if (!ship || !maze) return;
-      
-      // Vérifier les collisions avec les murs
-      const shipDirection = new THREE.Vector3();
-      ship.getWorldDirection(shipDirection);
-      
-      raycaster.set(ship.position, shipDirection);
-      
-      const intersects = raycaster.intersectObjects(maze.children);
-      
-      // Si une collision est détectée avec un mur et qu'elle est très proche
-      if (intersects.length > 0 && 
-          intersects[0].object.userData && 
-          intersects[0].object.userData.type === 'wall' && 
-          intersects[0].distance < 1) {
-        // Revenir à la position précédente
-        ship.position.copy(previousPosition);
+      // Call game flow service to record victory
+      if (window.$gameFlow) {
+        window.$gameFlow.completeGame('maze-3d', true);
       }
     }
     
-    function checkCollisions() {
-      if (!ship || !maze) return;
-      
-      // Vérifier les collisions avec les murs
-      const directions = [
-        new THREE.Vector3(1, 0, 0),   // droite
-        new THREE.Vector3(-1, 0, 0),  // gauche
-        new THREE.Vector3(0, 0, 1),   // avant
-        new THREE.Vector3(0, 0, -1),  // arrière
-      ];
-      
-      for (const direction of directions) {
-        raycaster.set(ship.position, direction);
-        const intersects = raycaster.intersectObjects(maze.children);
-        
-        if (intersects.length > 0 && 
-            intersects[0].object.userData && 
-            intersects[0].object.userData.type === 'wall' && 
-            intersects[0].distance < 0.5) {
-          // On est trop près d'un mur dans cette direction
-          isColliding = true;
-          return;
-        }
+    function handleGameOver() {
+      cancelAnimationFrame(animationFrameId);
+      if (gameTimer.value) {
+        clearInterval(gameTimer.value);
+        gameTimer.value = null;
       }
+      gameState.value = 'game-over';
       
-      isColliding = false;
-    }
-    
-    function checkGoal() {
-      if (!ship || !goal) return;
-      
-      // Ne vérifier la collision que si l'objectif est visible
-      if (!goal.visible) return;
-      
-      // Vérifier la distance entre le vaisseau et l'objectif
-      const distance = ship.position.distanceTo(goal.position);
-      
-      // Vérifier le temps de jeu pour éviter la victoire instantanée
-      const minGameTimeBeforeWin = 5; // 5 secondes minimum de jeu
-      const hasPlayedEnough = gameTime.value >= minGameTimeBeforeWin;
-      
-      // Vérifier si le joueur a suffisamment bougé de sa position de départ
-      const minDistanceFromStart = 5; // Distance minimale du point de départ
-      const hasMovedEnough = ship.position.distanceTo(shipStartPosition) >= minDistanceFromStart;
-      
-      if (distance < 2 && hasPlayedEnough && hasMovedEnough) {
-        console.log('Victoire! Distance:', distance, 'Temps:', gameTime.value, 'secondes');
-        endGame();
+      // Record game over in game flow
+      if (window.$gameFlow) {
+        window.$gameFlow.completeGame('maze-3d', false);
       }
     }
     
+    const router = useRouter();
+    
+    function continueToNextGame() {
+      router.push({ name: 'koesio-quiz' });
+    }
+    
+   
     // Cycle de vie du composant
     onMounted(() => {
       // Ne rien initialiser ici, tout sera fait au démarrage du jeu
@@ -756,11 +689,13 @@ export default defineComponent({
       gameState,
       gameTime,
       formattedTime,
+      timeLeft,
       gameContainer,
       startGame,
       restartGame,
       returnToMenu,
-      endGame
+      endGame,
+      continueToNextGame
     };
   }
 });

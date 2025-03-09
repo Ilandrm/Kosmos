@@ -75,7 +75,7 @@ import { defineComponent, ref, onMounted, onUnmounted, watch } from 'vue';
 import GameEngine3D from './GameEngine3D';
 import ScoreManager from './ScoreManager'; // Utiliser le nouveau ScoreManager
 import { useRouter } from 'vue-router';
-import GameFlowService from '../../services/GameFlowService';
+import { getNextGame, isLastGame } from '../../services/GameFlowService';
 
 export default defineComponent({
   name: 'AsteroidDodge3DGame',
@@ -236,7 +236,7 @@ export default defineComponent({
     };
     
     const continueToNextGame = () => {
-      const nextGame = GameFlowService.getNextGame('asteroid-dodge');
+      const nextGame = getNextGame('asteroid-dodge');
       router.push({ name: nextGame });
     };
     
@@ -529,6 +529,8 @@ export default defineComponent({
     // Nous ajouterons cet écouteur d'événements dans onMounted
     
     // Cycle de vie du composant
+    const gameTimer = ref<number | null>(null);
+    
     onMounted(() => {
       // Initialiser le jeu
       initGame();
@@ -553,8 +555,7 @@ export default defineComponent({
       }
       document.addEventListener('visibilitychange', handleVisibilityChange);
       
-      let gameTimer;
-      gameTimer = setTimeout(() => {
+      gameTimer.value = setTimeout(() => {
         endGame();
       }, 30000);
     });
@@ -581,7 +582,7 @@ export default defineComponent({
         gameEngine.dispose();
       }
       
-      clearTimeout(gameTimer);
+      clearTimeout(gameTimer.value);
     });
     
     // Surveiller les changements d'état pour effectuer des actions supplémentaires

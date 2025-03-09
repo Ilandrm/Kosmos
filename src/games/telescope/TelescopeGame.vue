@@ -9,11 +9,14 @@
         <div class="target-color" :style="{ backgroundColor: targetPlanet.color }"></div>
         <span>{{ targetPlanet.name }}</span>
       </div>
+      <div class="timer-display" v-if="gameStarted">
+        Temps restant: {{ timeLeft }} secondes
+      </div>
     </div>
     
     <div class="game-area" ref="gameArea" @mousedown="handleMouseDown">
       <!-- Instruction du jeu -->
-      <div class="game-instructions" v-if="!gameStarted">
+      <div class="game-instructions" v-if="!gameStarted && !victoryMessageVisible && !gameOverMessageVisible">
         <h2>Explorateur Spatial</h2>
         <p>Cliquez et glissez pour déplacer votre télescope.</p>
         <p>Trouvez et identifiez les planètes colorées dans l'espace.</p>
@@ -25,6 +28,14 @@
         <h2>Mission Accomplie!</h2>
         <p>Félicitations! Vous avez trouvé toutes les planètes.</p>
         <p>Score final: {{ score }}</p>
+        <button class="game-button" @click="startGame">Rejouer</button>
+        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
+      </div>
+      
+      <!-- Message de défaite (affiché quand le temps est écoulé) -->
+      <div class="game-instructions" v-if="gameOverMessageVisible">
+        <h2>Temps écoulé!</h2>
+        <p>Vous avez perdu!</p>
         <button class="game-button" @click="startGame">Rejouer</button>
         <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
@@ -77,34 +88,37 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from 'vue';
+import { defineComponent } from 'vue';
 import GameEngine from './GameEngine';
-import GameFlowService from '../../services/GameFlowService';
+import { getNextGame, isLastGame } from '@/services/GameFlowService';
 
 export default defineComponent({
   name: 'TelescopeGame',
   
   data() {
     return {
-      gameEngine: null as GameEngine | null,
-      gameArea: null as HTMLElement | null,
+      gameEngine: null,
+      gameArea: null,
       gameAreaBounds: { width: 0, height: 0 },
-      planets: [] as any[],
       position: { x: 0, y: 0 },
       gameStarted: false,
       score: 0,
-      targetPlanet: null as any,
-      planetsToFind: [] as any[],
+      targetPlanet: null,
+      planets: [],
+      planetsToFind: [],
       feedbackVisible: false,
       feedbackMessage: '',
       feedbackSuccess: false,
       victoryMessageVisible: false,
-      gameTimer: ref<number | null>(null)
+      gameOverMessageVisible: false,
+      timeLeft: 30,
+      gameTimer: null,
+      isDragging: false
     };
   },
   
   mounted() {
-    this.gameArea = this.$refs.gameArea as HTMLElement;
+    this.gameArea = this.$refs.gameArea;
     this.gameAreaBounds = this.gameArea.getBoundingClientRect();
     this.position = {
       x: this.gameAreaBounds.width / 2,
@@ -143,8 +157,8 @@ export default defineComponent({
     }
     
     // Annuler le timer de jeu
-    if (this.gameTimer.value) {
-      clearTimeout(this.gameTimer.value);
+    if (this.gameTimer) {
+      clearTimeout(this.gameTimer);
     }
   },
   
@@ -153,9 +167,11 @@ export default defineComponent({
       this.gameStarted = true;
       this.score = 0;
       this.victoryMessageVisible = false;
+      this.gameOverMessageVisible = false;
+      this.timeLeft = 30;
       
       // Mettre à jour les limites de la zone de jeu
-      this.gameAreaBounds = this.gameArea!.getBoundingClientRect();
+      this.gameAreaBounds = this.gameArea.getBoundingClientRect();
       
       // Initialiser la position du télescope
       this.position = {
@@ -169,9 +185,15 @@ export default defineComponent({
       }
       
       // Démarer le timer de jeu
-      this.gameTimer.value = setTimeout(() => {
-        this.endGame();
-      }, 30000);
+      this.gameTimer = setInterval(() => {
+        if (this.timeLeft > 0) {
+          this.timeLeft--;
+        } else {
+          clearInterval(this.gameTimer);
+          this.gameOverMessageVisible = true;
+          this.gameStarted = false;
+        }
+      }, 1000);
     },
     
     updatePlanets(planets: any[]) {
@@ -198,6 +220,7 @@ export default defineComponent({
     showVictoryMessage() {
       this.victoryMessageVisible = true;
       this.gameStarted = false;
+      clearInterval(this.gameTimer);
     },
     
     updateTelescopePosition() {
@@ -277,8 +300,6 @@ export default defineComponent({
     },
     
     // Variables pour le drag & drop
-    isDragging: false,
-    
     handleMouseDown(e: MouseEvent) {
       if (!this.gameStarted || !this.gameArea) return;
       
@@ -342,16 +363,8 @@ export default defineComponent({
       }
     },
     
-    endGame() {
-      this.gameStarted = false;
-      this.victoryMessageVisible = true;
-      this.feedbackMessage = 'Temps écoulé!';
-      this.feedbackVisible = true;
-      this.feedbackSuccess = false;
-    },
-    
     continueToNextGame() {
-      const nextGame = GameFlowService.getNextGame('telescope');
+      const nextGame = getNextGame('telescope');
       this.$router.push({ name: nextGame });
     }
   }
@@ -408,6 +421,17 @@ export default defineComponent({
   height: 20px;
   border-radius: 50%;
   border: 1px solid white;
+}
+
+.timer-display {
+  font-size: 24px;
+  color: #ff9900;
+  text-shadow: 0 0 10px rgba(255, 153, 0, 0.5);
+  font-weight: 700;
+  background: rgba(0, 20, 50, 0.8);
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 2px solid #ff9900;
 }
 
 .game-area {
@@ -618,4 +642,5 @@ export default defineComponent({
   80% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, 20px); }
 }
+
 </style>
