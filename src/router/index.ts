@@ -29,21 +29,27 @@ const router = createRouter({
       name: 'maze-3d',
       component: () => import('../games/maze-3d/Maze3DGame.vue')
     },
+   
     {
-    path: '/games/star-collector-3d',
-    name: 'star-collector-3d',
-    component: () => import('../games/star-collector-3d/StarCollector3DGame.vue')
-  },
-  {
-    path: '/games/koesio-quiz',
-    name: 'koesio-quiz',
-    component: () => import('../games/koesio-quiz/KoesioQuizGame.vue')
-  },
-  {
-    path: '/games/space-hangman',
-    name: 'space-hangman',
-    component: () => import('../games/space-hangman/SpaceHangmanGame.vue')
-  }
+      path: '/games/koesio-quiz',
+      name: 'koesio-quiz',
+      component: () => import('../games/koesio-quiz/KoesioQuizGame.vue')
+    },
+    {
+      path: '/games/space-hangman',
+      name: 'space-hangman',
+      component: () => import('../games/space-hangman/SpaceHangmanGame.vue')
+    },
+    {
+      path: '/mission-introduction',
+      name: 'mission-introduction',
+      component: () => import('../views/MissionIntroduction.vue')
+    },
+    {
+      path: '/completion',
+      name: 'completion',
+      component: () => import('../views/CompletionView.vue')
+    },
   ]
 })
 

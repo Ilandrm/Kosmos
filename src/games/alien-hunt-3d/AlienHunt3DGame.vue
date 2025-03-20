@@ -1,44 +1,88 @@
 <template>
   <div class="alien-hunt-container">
-    <div ref="gameContainer" class="game-canvas-container"></div>
+    <div 
+      ref="gameContainer" 
+      class="game-canvas-container"
+      @touchstart="handleTouchStart"
+      @touchmove="handleTouchMove"
+      @touchend="handleTouchEnd"
+    ></div>
+    <!-- reste du template inchangé -->
+    <GameInstruction
+        v-if="showInstructions"
+        :title="gameInstructions.title"
+        :players="gameInstructions.players"
+        :time="gameInstructions.time"
+        :instruction="gameInstructions.instruction"
+        @start="onInstructionComplete"
+      />
     
-    <!-- UI overlay -->
-    <div v-if="gameState !== 'playing'" class="game-overlay">
-      <div v-if="gameState === 'menu'" class="menu">
-        <h1>CHASSE AUX ALIENS 3D</h1>
-        <button @click="startGame" class="start-btn">COMMENCER</button>
-        <div class="instructions">
-          <h2>Instructions</h2>
-          <p>Utilisez votre souris pour viser et cliquez pour tirer.</p>
-          <p>Éliminez les vaisseaux aliens violets et évitez de tirer sur les verts.</p>
-          <p>Atteignez 10 points pour gagner!</p>
-        </div>
-      </div>
       
       <div v-if="gameState === 'victory'" class="victory">
         <h1>VICTOIRE!</h1>
-        <p>Score final: {{ score }}</p>
         <p>Temps: {{ formattedTime }}</p>
-        <button @click="restartGame" class="restart-btn">REJOUER</button>
-        <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
         <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
       
       <div v-if="gameState === 'game-over'" class="game-over">
         <h1>GAME OVER</h1>
-        <p>Score final: {{ score }}</p>
         <p>Temps: {{ formattedTime }}</p>
-        <button @click="restartGame" class="restart-btn">REJOUER</button>
-        <button @click="returnToMenu" class="menu-btn">MENU PRINCIPAL</button>
+        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
     </div>
     
     <!-- Game HUD -->
     <div v-if="gameState === 'playing'" class="game-hud">
-      <div class="score">Score: {{ score }}</div>
       <div class="timer">Temps: {{ formattedTime }}</div>
     </div>
-  </div>
+    
+    <!-- Cannon controls -->
+    <div v-if="gameState === 'playing'" class="cannons-container">
+      <div 
+        v-for="(cannon, index) in cannons" 
+        :key="index" 
+        :class="['cannon', {'active': selectedCannon === index, 'reloading': !cannon.canShoot}]"
+        :style="{
+          left: `${index === 0 ? 20 : index === 1 ? 40 : index === 2 ? 60 : 80}%`,
+          transform: `rotate(${cannon.rotation}deg)`
+        }"
+        @mousedown="selectCannon(index, $event)"
+        @touchstart.prevent="selectCannonTouch(index, $event)"
+      >
+        <div class="cannon-base"></div>
+        <div class="cannon-barrel"></div>
+        <div v-if="!cannon.canShoot" class="reload-indicator"></div>
+      </div>
+    </div>
+    
+    <!-- Aim Tracers - un par canon -->
+    <div 
+      v-for="(cannon, index) in cannons" 
+      :key="'tracer-'+index"
+      v-if="cannon && cannon.isAiming && gameState === 'playing'" 
+      class="aim-tracer" 
+      :style="{
+        left: cannon.aimPosition.x + 'px',
+        top: cannon.aimPosition.y + 'px',
+        transform: `translate(-50%, -50%)`,
+        backgroundColor: cannon.color,
+        boxShadow: `0 0 8px 2px ${cannon.color}`
+      }">
+      <div class="aim-tracer-inner"></div>
+    </div>
+    
+    <!-- Player Names -->
+    <div v-if="gameState === 'playing'" class="player-names">
+      <div 
+        v-for="(name, index) in playerNames" 
+        :key="'player-'+index"
+        class="player-name"
+        :style="{ color: playerColors[index] }"
+      >
+        {{ name }}
+      </div>
+    </div>
+
 </template>
 
 <script lang="ts">
@@ -48,18 +92,22 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { useRouter } from 'vue-router';
 import GameFlowService from '../../services/GameFlowService';
+import GameInstruction from '../../components/GameInstruction.vue';
 
 // Peut-être d'autres imports nécessaires
 
 export default defineComponent({
   name: 'AlienHunt3DGame',
+  components: {
+    GameInstruction
+  },
   setup() {
     const router = useRouter();
     // État du jeu
     const gameState = ref('menu'); // 'menu', 'playing', 'victory', 'game-over'
-    const score = ref(0);
     const gameTime = ref(0);
     const gameTimer = ref<number | null>(null);
+    const score = ref(0);
     
     // Formatage du temps
     const formattedTime = computed(() => {
@@ -67,6 +115,21 @@ export default defineComponent({
       const seconds = gameTime.value % 60;
       return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
     });
+    
+    // Gestion des canons et joueurs
+    const playerColors = ['#FF5252', '#4CAF50', '#2196F3', '#FFC107'];
+    const playerNames = ['Joueur Rouge', 'Joueur Vert', 'Joueur Bleu', 'Joueur Jaune'];
+    
+    // Gestion des canons - tous les joueurs peuvent jouer en même temps
+    const cannons = ref([
+      { rotation: 0, color: '#FF5252', isAiming: false, canShoot: true, aimPosition: { x: 0, y: 0 }, aimRotation: 0 },
+      { rotation: 0, color: '#4CAF50', isAiming: false, canShoot: true, aimPosition: { x: 0, y: 0 }, aimRotation: 0 },
+      { rotation: 0, color: '#2196F3', isAiming: false, canShoot: true, aimPosition: { x: 0, y: 0 }, aimRotation: 0 },
+      { rotation: 0, color: '#FFC107', isAiming: false, canShoot: true, aimPosition: { x: 0, y: 0 }, aimRotation: 0 }
+    ]);
+    
+    // Canon sélectionné actuellement par l'utilisateur
+    const selectedCannon = ref(-1);
     
     // Références aux éléments DOM
     const gameContainer = ref<HTMLElement | null>(null);
@@ -84,20 +147,22 @@ export default defineComponent({
     let friendlyShips: THREE.Object3D[] = [];
     let bullets: THREE.Object3D[] = [];
     let stars: THREE.Points;
+    let tracers: THREE.Object3D[] = [];
+    let cannonsObjects: THREE.Object3D[] = [];
     
     // Modèle 3D OVNI
     let ovniModel: THREE.Group | null = null;
     const ovniScale = 0.8; // Échelle pour correspondre à la taille des soucoupes originales
     
     // Variables du gameplay
-    const maxAliens = 10;
-    const maxFriendlyShips = 5;
-    const alienSpawnTime = 2000; // ms
+    const maxAliens = 20; // Increased from 10
+    const maxFriendlyShips = 7; // Increased from 5
+    const alienSpawnTime = 1500; // ms - Decreased from 2000
     const friendlySpawnTime = 3000; // ms
     const bulletSpeed = 0.5;
     const shipSpeed = 0.05;
     const shipSpawnRange = 20;
-    const winScore = 10;
+    const winScore = 20; // Increased from 10
     
     // Timers et contrôles
     let alienSpawnTimer: number | null = null;
@@ -105,8 +170,14 @@ export default defineComponent({
     const mouse = new THREE.Vector2();
     let mouseDown = false;
     let canShoot = true;
-    const shootCooldown = 500; // ms
-    
+    const shootCooldown = 700; // ms - Increased from 500ms for 4-player game
+    const showInstructions = ref(true);
+    const gameInstructions = ref({
+      title: "Chasses aux aliens",
+      players: "4 joueurs",
+      time: "30 secondes",
+      instruction: "Visez les vaisseaux violets et évitez les vaisseaux verts"
+    });
     // État des objets
     interface ShipData {
       speed: THREE.Vector3;
@@ -114,7 +185,554 @@ export default defineComponent({
       value: number;
     }
     
-    const objectData = new WeakMap<THREE.Object3D, ShipData>();
+    interface BulletData {
+      speed: THREE.Vector3;
+      health: number;
+      value: number;
+      playerIndex: number;
+    }
+    
+    interface TracerData {
+      player: number;
+      timeToLive: number;
+    }
+    
+    const objectData = new WeakMap<THREE.Object3D, ShipData | BulletData | TracerData>();
+    
+    // Fonction pour sélectionner un canon
+    function selectCannon(index: number, event: MouseEvent) {
+      // Vérifier si le canon peut tirer
+      if (!cannons.value[index].canShoot) {
+        return; // Canon en recharge
+      }
+      
+      selectedCannon.value = index;
+      cannons.value[index].isAiming = true;
+      
+      // Créer un tracer immédiatement pour le feedback visuel
+      if (scene && cannonsObjects[index]) {
+        const angle = cannons.value[index].rotation;
+        createTracer(index, angle);
+      }
+      
+      // Initialiser la position de visée avec RequestAnimationFrame pour suivi fluide
+      updateAimRotation(index, event);
+      
+      // Ajouter les écouteurs d'événements pour le mouvement et le relâchement
+      const handleMove = (e: MouseEvent) => handleAiming(index, e);
+      const handleRelease = (e: MouseEvent) => {
+        // Tirer dans la direction où l'utilisateur relâche
+        handleShoot(index);
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleRelease);
+        window.removeEventListener('mouseleave', handleMouseLeave);
+        
+        // Arrêter le suivi de la souris pour ce canon
+        stopMouseTracking(index);
+      };
+      
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleRelease);
+      
+      // Ajouter un événement mouseleave pour gérer le cas où la souris quitte la fenêtre
+      const handleMouseLeave = () => {
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleRelease);
+        window.removeEventListener('mouseleave', handleMouseLeave);
+        
+        // Annuler le visage et arrêter le suivi
+        cannons.value[index].isAiming = false;
+        selectedCannon.value = -1;
+        stopMouseTracking(index);
+      };
+      
+      window.addEventListener('mouseleave', handleMouseLeave);
+    }
+    
+    // Fonction pour sélectionner un canon via tactile
+    function selectCannonTouch(index: number, event: TouchEvent) {
+      event.preventDefault(); // Empêcher le défilement par défaut
+      
+      // Vérifier si le canon peut tirer
+      if (!cannons.value[index].canShoot) {
+        return;
+      }
+      
+      selectedCannon.value = index;
+      cannons.value[index].isAiming = true;
+      
+      // Obtenez les coordonnées du premier toucher
+      const touch = event.touches[0];
+      
+      // Créer un tracer immédiatement pour le feedback visuel
+      if (scene && cannonsObjects[index]) {
+        const angle = cannons.value[index].rotation;
+        createTracer(index, angle);
+      }
+      
+      // Initialiser la position de visée
+      updateAimRotationTouch(index, touch);
+      
+      // Ajouter les écouteurs d'événements pour le mouvement et le relâchement
+      const handleMove = (e: TouchEvent) => handleAimingTouch(index, e);
+      const handleRelease = (e: TouchEvent) => {
+        // Tirer dans la direction où l'utilisateur relâche
+        handleShoot(index);
+        window.removeEventListener('touchmove', handleMove);
+        window.removeEventListener('touchend', handleRelease);
+        window.removeEventListener('touchcancel', handleRelease);
+        
+        // Arrêter le suivi tactile pour ce canon
+        stopMouseTracking(index);
+      };
+      
+      window.addEventListener('touchmove', handleMove, { passive: false });
+      window.addEventListener('touchend', handleRelease);
+      window.addEventListener('touchcancel', handleRelease);
+    }
+    
+    function onInstructionComplete() {
+      showInstructions.value = false;
+      startGame();
+    };
+    // Fonction pour gérer le mouvement de la souris pendant le visage
+    function handleAiming(cannonIndex: number, event: MouseEvent) {
+      if (!cannons.value[cannonIndex].isAiming) return;
+      
+      // Utiliser notre système de suivi fluide pour une mise à jour plus fluide
+      updateAimRotation(cannonIndex, event);
+      
+      // Mettre à jour le tracer pour montrer la direction de tir
+      // Supprimer les anciens tracers de ce canon
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        const tracer = tracers[i];
+        const data = objectData.get(tracer) as TracerData;
+        if (data && data.player === cannonIndex) {
+          scene.remove(tracer);
+          tracers.splice(i, 1);
+        }
+      }
+      
+      // Créer un nouveau tracer dans la direction actuelle
+      const angle = cannons.value[cannonIndex].aimRotation;
+      createTracer(cannonIndex, angle);
+    }
+    
+    // Fonction pour gérer le mouvement tactile pendant le visage
+    function handleAimingTouch(cannonIndex: number, event: TouchEvent) {
+      event.preventDefault(); // Empêcher le défilement
+      
+      if (!cannons.value[cannonIndex].isAiming) return;
+      
+      // Utiliser le premier toucher
+      const touch = event.touches[0];
+      
+      // Mettre à jour la rotation avec les coordonnées tactiles
+      updateAimRotationTouch(cannonIndex, touch);
+      
+      // Mettre à jour le tracer pour montrer la direction de tir
+      // Supprimer les anciens tracers de ce canon
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        const tracer = tracers[i];
+        const data = objectData.get(tracer) as TracerData;
+        if (data && data.player === cannonIndex) {
+          scene.remove(tracer);
+          tracers.splice(i, 1);
+        }
+      }
+      
+      // Créer un nouveau tracer dans la direction actuelle
+      const angle = cannons.value[cannonIndex].aimRotation;
+      createTracer(cannonIndex, angle);
+    }
+    
+    // Variables pour le suivi fluide de la souris
+    let mouseMoveCallbacks = new Map(); // Pour suivre les callbacks par canon
+    let lastMousePosition = { x: 0, y: 0 }; // Dernière position de la souris
+    let isMouseUpdateRunning = false; // Indicateur pour éviter les mises à jour redondantes
+    let requestAnimationId = null; // Pour le suivi fluide de la souris
+
+    // Fonction pour calculer l'angle de rotation - version ultra fluide avec RAF
+    function updateAimRotation(cannonIndex: number, event: MouseEvent) {
+      if (cannonIndex < 0 || cannonIndex >= cannons.value.length) return;
+      
+      // Mettre à jour la dernière position de la souris
+      lastMousePosition = {
+        x: event.clientX,
+        y: event.clientY
+      };
+      
+      // Stockage de la position exacte de la souris pour le viseur
+      cannons.value[cannonIndex].aimPosition = {
+        x: event.clientX,
+        y: event.clientY
+      };
+      
+      // Créer ou mettre à jour la fonction de mise à jour pour ce canon
+      const updateFunction = () => {
+        // Position fixe des canons en bas de l'écran
+        const cannonPositions = [
+          { x: window.innerWidth * 0.2, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.4, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.6, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.8, y: window.innerHeight - 50 }
+        ];
+        
+        const cannonPos = cannonPositions[cannonIndex];
+        
+        // Calculer l'angle entre le canon et la dernière position de la souris
+        const dx = lastMousePosition.x - cannonPos.x;
+        const dy = cannonPos.y - lastMousePosition.y;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        
+        // Limiter l'angle pour que le canon ne puisse pas tirer vers le bas
+        const clampedAngle = Math.min(Math.max(angle, 0), 180);
+        
+        // Application directe sans lissage pour une réponse immédiate
+        cannons.value[cannonIndex].rotation = clampedAngle - 90;
+        
+        // Mettre à jour la rotation du tracer
+        cannons.value[cannonIndex].aimRotation = angle;
+        
+        // Appliquer immédiatement à l'objet 3D
+        if (cannonIndex < cannonsObjects.length) {
+          const cannon = cannonsObjects[cannonIndex];
+          if (cannon && cannon.children && cannon.children.length > 1) {
+            const rotationRadians = (clampedAngle - 90) * (Math.PI / 180);
+            cannon.children[1].rotation.z = rotationRadians;
+          }
+        }
+      };
+      
+      // Stocker le callback pour ce canon
+      mouseMoveCallbacks.set(cannonIndex, updateFunction);
+      
+      // Exécuter immédiatement la première mise à jour
+      updateFunction();
+      
+      // Démarrer la boucle de mise à jour si ce n'est pas déjà fait
+      startMouseTracking();
+    }
+    
+    // Fonction pour calculer l'angle de rotation à partir d'un événement tactile
+    function updateAimRotationTouch(cannonIndex: number, touch: Touch) {
+      if (cannonIndex < 0 || cannonIndex >= cannons.value.length) return;
+      
+      // Mettre à jour la dernière position tactile
+      lastMousePosition = {
+        x: touch.clientX,
+        y: touch.clientY
+      };
+      
+      // Stockage de la position exacte du toucher pour le viseur
+      cannons.value[cannonIndex].aimPosition = {
+        x: touch.clientX,
+        y: touch.clientY
+      };
+      
+      // Créer ou mettre à jour la fonction de mise à jour pour ce canon
+      const updateFunction = () => {
+        // Position fixe des canons en bas de l'écran
+        const cannonPositions = [
+          { x: window.innerWidth * 0.2, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.4, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.6, y: window.innerHeight - 50 },
+          { x: window.innerWidth * 0.8, y: window.innerHeight - 50 }
+        ];
+        
+        const cannonPos = cannonPositions[cannonIndex];
+        
+        // Calculer l'angle entre le canon et la position tactile
+        const dx = lastMousePosition.x - cannonPos.x;
+        const dy = cannonPos.y - lastMousePosition.y;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        
+        // Limiter l'angle pour que le canon ne puisse pas tirer vers le bas
+        const clampedAngle = Math.min(Math.max(angle, 0), 180);
+        
+        // Application directe sans lissage pour une réponse immédiate
+        cannons.value[cannonIndex].rotation = clampedAngle - 90;
+        
+        // Mettre à jour la rotation du tracer
+        cannons.value[cannonIndex].aimRotation = angle;
+        
+        // Appliquer immédiatement à l'objet 3D
+        if (cannonIndex < cannonsObjects.length) {
+          const cannon = cannonsObjects[cannonIndex];
+          if (cannon && cannon.children && cannon.children.length > 1) {
+            const rotationRadians = (clampedAngle - 90) * (Math.PI / 180);
+            cannon.children[1].rotation.z = rotationRadians;
+          }
+        }
+      };
+      
+      // Stocker le callback pour ce canon
+      mouseMoveCallbacks.set(cannonIndex, updateFunction);
+      
+      // Exécuter immédiatement la première mise à jour
+      updateFunction();
+      
+      // Démarrer la boucle de mise à jour si ce n'est pas déjà fait
+      startMouseTracking();
+    }
+    
+    // Fonction pour démarrer le suivi fluide de la souris
+    function startMouseTracking() {
+      if (isMouseUpdateRunning) return;
+      
+      isMouseUpdateRunning = true;
+      
+      // Fonction de boucle d'animation pour un suivi ultra fluide
+      const animateMouseTracking = () => {
+        // Exécuter toutes les callbacks de mise à jour
+        mouseMoveCallbacks.forEach(callback => callback());
+        
+        // Continuer la boucle si au moins un canon est en mode visée
+        if (mouseMoveCallbacks.size > 0) {
+          requestAnimationId = requestAnimationFrame(animateMouseTracking);
+        } else {
+          isMouseUpdateRunning = false;
+        }
+      };
+      
+      // Démarrer la boucle d'animation
+      requestAnimationId = requestAnimationFrame(animateMouseTracking);
+    }
+    
+    // Fonction pour arrêter le suivi de la souris pour un canon spécifique
+    function stopMouseTracking(cannonIndex: number) {
+      mouseMoveCallbacks.delete(cannonIndex);
+      
+      // Si plus aucun canon n'est suivi, arrêter la boucle d'animation
+      if (mouseMoveCallbacks.size === 0 && requestAnimationId) {
+        cancelAnimationFrame(requestAnimationId);
+        isMouseUpdateRunning = false;
+      }
+    }
+    
+    // Fonction pour tirer - appelée lors du relâchement du clic
+    function handleShoot(cannonIndex: number) {
+      if (!cannons.value[cannonIndex].isAiming) return;
+      
+      // Récupérer l'angle de rotation au moment du relâchement pour un tir précis
+      const angle = cannons.value[cannonIndex].aimRotation;
+      
+      // Désactiver le mode de visée
+      cannons.value[cannonIndex].isAiming = false;
+      
+      // Créer un effet visuel de tir (éclair, flash, etc.)
+      if (cannonsObjects[cannonIndex]) {
+        const cannon = cannonsObjects[cannonIndex];
+        // Ajouter un effet d'éclair au canon
+        if (cannon.children.length > 1) {
+          const barrel = cannon.children[1];
+          if (barrel.material) {
+            // Sauvegarder l'état original
+            const originalEmissive = barrel.material.emissive ? barrel.material.emissive.clone() : new THREE.Color(0);
+            const originalEmissiveIntensity = barrel.material.emissiveIntensity || 0;
+            
+            // Appliquer un flash
+            barrel.material.emissive = new THREE.Color(0xffffff);
+            barrel.material.emissiveIntensity = 1;
+            
+            // Revenir à l'état normal après un court délai
+            setTimeout(() => {
+              if (barrel.material) {
+                barrel.material.emissive = originalEmissive;
+                barrel.material.emissiveIntensity = originalEmissiveIntensity;
+              }
+            }, 100);
+          }
+        }
+      }
+      
+      // Créer la balle en fonction de l'angle de tir au moment du relâchement
+      shootFromCannon(cannonIndex);
+      
+      // Nettoyer les tracers de visée pour ce canon
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        const tracer = tracers[i];
+        const data = objectData.get(tracer) as TracerData;
+        if (data && data.player === cannonIndex) {
+          scene.remove(tracer);
+          tracers.splice(i, 1);
+        }
+      }
+      
+      // Désactiver le tir pour ce canon pendant le temps de recharge
+      cannons.value[cannonIndex].canShoot = false;
+      setTimeout(() => {
+        cannons.value[cannonIndex].canShoot = true;
+      }, shootCooldown);
+      
+      // Désélectionner le canon
+      if (selectedCannon.value === cannonIndex) {
+        selectedCannon.value = -1;
+      }
+      
+      // Arrêter explicitement le suivi de la souris pour ce canon
+      stopMouseTracking(cannonIndex);
+    }
+    
+    // Fonction pour créer et afficher le tracer de visée
+    function createTracer(cannonIndex: number, angle: number) {
+      // Créer une ligne pour représenter le traceur - ligne plus nette et plus visible
+      const tracerGeometry = new THREE.BufferGeometry();
+      
+      // Utiliser un matériau de ligne plus visible
+      const tracerMaterial = new THREE.LineBasicMaterial({
+        color: 0xFFFFFF, // Blanc lumineux pour une meilleure visibilité
+        linewidth: 3, // Largeur de ligne maximale supportée par WebGL
+        opacity: 1.0,
+        transparent: false
+      });
+      
+      // Appliquer la couleur du joueur comme une teinte
+      const playerColor = new THREE.Color(playerColors[cannonIndex]);
+      tracerMaterial.color.lerp(playerColor, 0.7); // Mélange de blanc et de la couleur du joueur
+      
+      // Récupérer la position du canon
+      const cannon = cannonsObjects[cannonIndex];
+      const cannonPos = new THREE.Vector3();
+      cannon.getWorldPosition(cannonPos);
+      
+      // Récupérer la position de la souris
+      const mousePos = cannons.value[cannonIndex].aimPosition;
+      
+      // Créer un vecteur depuis la position de la souris sur l'écran
+      const mouse = new THREE.Vector2(
+        (mousePos.x / window.innerWidth) * 2 - 1,
+        -(mousePos.y / window.innerHeight) * 2 + 1
+      );
+      
+      // Utiliser le raycaster pour projeter un rayon depuis la position de la souris
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Calculer la direction à partir du rayon (plus précis pour viser en 3D)
+      const rayDirection = raycaster.ray.direction.clone();
+      
+      // Calculer l'angle en radians
+      const angleRadians = angle * (Math.PI / 180);
+      
+      // Créer une direction hybride qui mélange le raycaster et l'angle calculé
+      const direction = new THREE.Vector3(
+        rayDirection.x * 0.7 + Math.cos(angleRadians) * 0.3,
+        rayDirection.y * 0.7 + Math.sin(angleRadians) * 0.3,
+        rayDirection.z * 0.7 - 0.3
+      ).normalize();
+      
+      // Ajuster la longueur du traceur
+      const length = 50;
+      direction.multiplyScalar(length);
+      
+      // Calculer le point final
+      const endPosition = cannonPos.clone().add(direction);
+      
+      // Créer une ligne droite simple avec seulement deux points - plus propre
+      const positions = new Float32Array(6); // Seulement deux points (début et fin) pour une ligne parfaitement droite
+      
+      // Point de départ (position du canon)
+      positions[0] = cannonPos.x;
+      positions[1] = cannonPos.y;
+      positions[2] = cannonPos.z;
+      
+      // Point d'arrivée
+      positions[3] = endPosition.x;
+      positions[4] = endPosition.y;
+      positions[5] = endPosition.z;
+      
+      tracerGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const tracer = new THREE.Line(tracerGeometry, tracerMaterial);
+      
+      // Ajouter un léger effet de lueur
+      tracer.material.emissive = new THREE.Color(playerColors[cannonIndex]);
+      tracer.material.emissiveIntensity = 0.7;
+      
+      // Sauvegarder les données du traceur
+      objectData.set(tracer, {
+        player: cannonIndex,
+        timeToLive: 15 // Durée de vie un peu plus courte pour éviter les confusions
+      } as TracerData);
+      
+      // Ajouter un point plus visible à l'extrémité pour mieux visualiser la destination
+      const endPointGeometry = new THREE.SphereGeometry(0.4, 12, 12); // Légèrement plus grand et plus détaillé
+      
+      // Utiliser MeshPhongMaterial qui supporte l'émissivité pour un effet lumineux
+      const endPointMaterial = new THREE.MeshPhongMaterial({
+        color: 0xFFFFFF, // Blanc lumineux pour une meilleure visibilité
+        specular: 0xFFFFFF,
+        shininess: 100,
+        emissive: new THREE.Color(playerColors[cannonIndex]),
+        emissiveIntensity: 0.7
+      });
+      
+      const endPoint = new THREE.Mesh(endPointGeometry, endPointMaterial);
+      endPoint.position.copy(endPosition);
+      
+      // Grouper le tracer et le point d'extrémité
+      const tracerGroup = new THREE.Group();
+      tracerGroup.add(tracer);
+      tracerGroup.add(endPoint);
+      
+      // Sauvegarder les mêmes données pour le groupe
+      objectData.set(tracerGroup, {
+        player: cannonIndex,
+        timeToLive: 15
+      } as TracerData);
+      
+      scene.add(tracerGroup);
+      tracers.push(tracerGroup);
+      
+      return tracerGroup;
+    }
+    
+    // Fonction pour mettre à jour les traceurs
+    function updateTracers() {
+      for (let i = tracers.length - 1; i >= 0; i--) {
+        const tracer = tracers[i];
+        const data = objectData.get(tracer) as TracerData;
+        
+        if (data) {
+          data.timeToLive--;
+          
+          // Si ce traceur est lié à un canon en cours de visée, le garder complètement visible
+          const cannonIsAiming = cannons.value[data.player]?.isAiming || false;
+          
+          if (cannonIsAiming) {
+            // Garder la ligne de visée bien visible
+            if (tracer instanceof THREE.Group) {
+              tracer.children.forEach(child => {
+                if (child.material) {
+                  child.material.opacity = 1.0;
+                }
+              });
+            } else if (tracer.material) {
+              tracer.material.opacity = 1.0;
+            }
+          } else {
+            // Faire disparaître progressivement les traceurs qui ne sont pas actifs
+            if (tracer instanceof THREE.Group) {
+              // Gérer les éléments du groupe
+              tracer.children.forEach(child => {
+                if (child.material) {
+                  child.material.opacity = data.timeToLive / 15;
+                }
+              });
+            } else if (tracer.material) {
+              // Cas simple pour les tracers qui ne sont pas dans un groupe
+              tracer.material.opacity = data.timeToLive / 15;
+            }
+          }
+          
+          // Supprimer le traceur s'il a expiré ou si le joueur n'est plus en train de viser
+          if (data.timeToLive <= 0 || !cannons.value[data.player].isAiming) {
+            scene.remove(tracer);
+            tracers.splice(i, 1);
+          }
+        }
+      }
+    }
     
     // Méthodes du jeu
     function initializeGame() {
@@ -166,20 +784,60 @@ export default defineComponent({
       // Créer le fond avec des étoiles
       createStars();
       
+      // Créer les cannons 3D
+      createCannons();
+      
       // Charger le modèle 3D OVNI
       loadOvniModel();
       
-      // Enregistrer les gestionnaires d'événements
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mousedown', handleMouseDown);
-      window.addEventListener('mouseup', handleMouseUp);
-      window.addEventListener('resize', handleResize);
+      // Réinitialiser le score et les vaisseaux
+      score.value = 0;
+      selectedCannon.value = -1;
       
       // Ajouter des vaisseaux (après un délai pour s'assurer que le modèle est chargé)
       setTimeout(() => {
         scheduleAlienSpawning();
         scheduleFriendlySpawning();
       }, 1000);
+    }
+    
+    function createCannons() {
+      // Créer 4 cannons 3D à la base de l'écran
+      cannonsObjects = [];
+      
+      for (let i = 0; i < 4; i++) {
+        const cannonGroup = new THREE.Group();
+        
+        // Base du canon
+        const baseGeometry = new THREE.CylinderGeometry(1, 1.5, 0.5, 16);
+        const baseMaterial = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(playerColors[i]),
+          shininess: 50
+        });
+        const base = new THREE.Mesh(baseGeometry, baseMaterial);
+        
+        // Canon (tube)
+        const barrelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
+        const barrelMaterial = new THREE.MeshPhongMaterial({
+          color: 0x333333,
+          shininess: 70
+        });
+        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        barrel.rotation.x = Math.PI / 2; // Orienter le canon horizontalement
+        barrel.position.set(0, 0.5, 0.5); // Positionner au-dessus de la base
+        
+        // Ajouter les éléments au groupe
+        cannonGroup.add(base);
+        cannonGroup.add(barrel);
+        
+        // Positionner le canon
+        const x = (i * 7) - 10.5; // Répartir les canons (-10.5, -3.5, 3.5, 10.5)
+        cannonGroup.position.set(x, -5, 10); // En bas de l'écran
+        
+        // Ajouter le canon à la scène
+        scene.add(cannonGroup);
+        cannonsObjects.push(cannonGroup);
+      }
     }
     
     function createStars() {
@@ -221,25 +879,18 @@ export default defineComponent({
       
       const tryLoadModel = () => {
         if (pathIndex >= paths.length) {
-          console.error('Impossible de charger le modèle OVNI après plusieurs tentatives');
           return;
         }
         
-        console.log(`Tentative de chargement du modèle OVNI depuis: ${paths[pathIndex]}`);
         
         loader.load(
           // URL du modèle
           paths[pathIndex],
           // Callback appelé quand le modèle est chargé
           function (gltf) {
-            console.log('Modèle OVNI chargé avec succès:', gltf);
             ovniModel = gltf.scene;
             
-            // Analyser la structure du modèle
-            console.log('Structure du modèle:');
-            ovniModel.traverse((child) => {
-              console.log(child.name, child.type, child.isMesh ? 'Mesh' : '');
-            });
+           
             
             // Mettre à l'échelle le modèle à une taille appropriée
             ovniModel.scale.set(ovniScale, ovniScale, ovniScale);
@@ -257,16 +908,13 @@ export default defineComponent({
             ovniModel.visible = false;
             
             // Créer un vaisseau test pour vérifier le modèle
-            console.log('Création d\'un vaisseau test pour vérifier le modèle');
             createAlienShip();
           },
           // Callback de progression du chargement
           function (xhr) {
-            console.log(`Chargement du modèle OVNI: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
           },
           // Callback d'erreur
           function (error) {
-            console.error(`Erreur lors du chargement du modèle OVNI depuis ${paths[pathIndex]}:`, error);
             pathIndex++;
             tryLoadModel(); // Essayer le prochain chemin
           }
@@ -435,49 +1083,101 @@ export default defineComponent({
       return ship;
     }
     
-    function createBullet() {
+    function shootFromCannon(cannonIndex: number) {
+      // Vérifier que le canon existe
+      if (cannonIndex < 0 || cannonIndex >= cannonsObjects.length) return;
+      
+      // Récupérer la rotation non clampée du canon (angle de visée exact)
+      const angle = cannons.value[cannonIndex].aimRotation;
+      
+      // Créer un tracer pour visualiser le tir en utilisant l'angle exact
+      createTracer(cannonIndex, angle);
+      
+      // Créer la balle avec l'angle exact
+      createBulletFromCannon(cannonIndex, angle);
+    }
+    
+    function createBulletFromCannon(cannonIndex: number, angle: number) {
       // Créer une balle (tir laser)
-      const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+      const bulletGeometry = new THREE.SphereGeometry(0.3, 8, 8); // Légèrement plus grosse pour faciliter les collisions
       const bulletMaterial = new THREE.MeshPhongMaterial({
-        color: 0x33aaff,
-        emissive: 0x0066cc,
+        color: new THREE.Color(playerColors[cannonIndex]),
+        emissive: new THREE.Color(playerColors[cannonIndex]),
         shininess: 100,
       });
       
       const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
       
-      // Positionner la balle devant la caméra
-      bullet.position.set(0, 0, 10);
-      bullet.position.copy(camera.position);
+      // Récupérer la position du canon
+      const cannon = cannonsObjects[cannonIndex];
+      const cannonPos = new THREE.Vector3();
+      cannon.getWorldPosition(cannonPos);
       
-      // Créer un vecteur pour la direction de la balle
-      const bulletDirection = new THREE.Vector3();
-      bulletDirection.set(mouse.x, mouse.y, 0.5);
-      bulletDirection.unproject(camera);
-      bulletDirection.sub(camera.position).normalize();
+      // Récupérer aussi la position de la souris pour mieux viser
+      const mousePos = cannons.value[cannonIndex].aimPosition;
       
-      // Sauvegarder la direction
+      // Créer un vecteur depuis la position de la souris sur l'écran
+      const mouse = new THREE.Vector2(
+        (mousePos.x / window.innerWidth) * 2 - 1,
+        -(mousePos.y / window.innerHeight) * 2 + 1
+      );
+      
+      // Utiliser le raycaster pour projeter un rayon depuis la position de la souris
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      
+      // Calculer la direction à partir du rayon (plus précis pour viser en 3D)
+      const direction = raycaster.ray.direction.clone();
+      
+      // Ajuster la position de départ de la balle - la faire partir du canon
+      bullet.position.copy(cannonPos);
+      
+      // Ajuster la direction avec l'angle pour plus de contrôle
+      const angleRadians = angle * (Math.PI / 180);
+      
+      // Mélanger le raycaster avec l'angle calculé pour un meilleur contrôle
+      const hybridDirection = new THREE.Vector3(
+        direction.x * 0.7 + Math.cos(angleRadians) * 0.3, 
+        direction.y * 0.7 + Math.sin(angleRadians) * 0.3,
+        direction.z * 0.7 - 0.3  // Légèrement orienté vers l'avant
+      ).normalize();
+      
+      // Sauvegarder la direction et le joueur
       objectData.set(bullet, {
-        speed: bulletDirection.multiplyScalar(bulletSpeed),
+        speed: hybridDirection.multiplyScalar(bulletSpeed * 1.2), // Vitesse légèrement augmentée
         health: 1,
-        value: 0
-      });
+        value: 0,
+        playerIndex: cannonIndex
+      } as BulletData);
       
-      bullet.userData = { type: 'bullet' };
+      bullet.userData = { type: 'bullet', player: cannonIndex };
       scene.add(bullet);
       bullets.push(bullet);
       
       return bullet;
     }
     
+    // Ancienne fonction maintenue pour compatibilité
+    function createBullet() {
+      return createBulletFromCannon(0, 90); // Default to first player
+    }
+    
     function scheduleAlienSpawning() {
-      // Créer un vaisseau alien tout de suite
-      createAlienShip();
+      // Créer plusieurs vaisseaux aliens tout de suite (3 au lieu de 1)
+      for (let i = 0; i < 3; i++) {
+        createAlienShip();
+      }
       
-      // Programmer la création de nouveaux vaisseaux
+      // Programmer la création de nouveaux vaisseaux plus fréquemment
       alienSpawnTimer = window.setInterval(() => {
         if (alienShips.length < maxAliens && gameState.value === 'playing') {
-          createAlienShip();
+          // Créer 1-2 vaisseaux à la fois
+          const count = Math.random() < 0.3 ? 2 : 1;
+          for (let i = 0; i < count; i++) {
+            if (alienShips.length < maxAliens) {
+              createAlienShip();
+            }
+          }
         }
       }, alienSpawnTime);
     }
@@ -486,10 +1186,13 @@ export default defineComponent({
       // Créer un vaisseau ami tout de suite
       createFriendlyShip();
       
-      // Programmer la création de nouveaux vaisseaux
+      // Programmer la création de nouveaux vaisseaux moins fréquemment
       friendlySpawnTimer = window.setInterval(() => {
         if (friendlyShips.length < maxFriendlyShips && gameState.value === 'playing') {
-          createFriendlyShip();
+          // 70% de chance de créer un vaisseau ami
+          if (Math.random() < 0.7) {
+            createFriendlyShip();
+          }
         }
       }, friendlySpawnTime);
     }
@@ -500,8 +1203,17 @@ export default defineComponent({
       
       // Mettre à jour l'état du jeu
       gameState.value = 'playing';
-      score.value = 0;
       gameTime.value = 0;
+      score.value = 0;
+      
+      // Réinitialiser tous les canons
+      cannons.value.forEach(cannon => {
+        cannon.isAiming = false;
+        cannon.canShoot = true;
+        cannon.rotation = 0;
+      });
+      
+      selectedCannon.value = -1;
       
       // Démarrer le compteur de temps
       gameTimer.value = window.setInterval(() => {
@@ -511,10 +1223,15 @@ export default defineComponent({
       // Démarrer la boucle d'animation
       animate();
       
-      // Démarrer le timer pour finir le jeu après 30 secondes
+      // Démarrer le timer pour finir le jeu après 60 secondes (augmenté pour partie 4 joueurs)
       let gameTimerId = setTimeout(() => {
-        endGame();
-      }, 30000);
+        // Si le score n'est pas atteint quand le timer s'arrête, c'est une défaite
+        if (score.value < winScore) {
+          endGame(false);
+        } else {
+          endGame(true);
+        }
+      }, 60000);
       
       onBeforeUnmount(() => {
         clearTimeout(gameTimerId);
@@ -616,18 +1333,18 @@ export default defineComponent({
     }
     
     function continueToNextGame() {
-      const nextGame = GameFlowService.getNextGame('alien-hunt');
-      if (nextGame) {
-        router.push({ name: nextGame }).catch(err => {
-          console.error('Navigation error:', err);
+      const nextGame = GameFlowService.getNextGame('alien-hunt-3d');
+      if (nextGame === 'koesio-quiz') {
+        router.push('/games/koesio-quiz').catch(err => {
         });
-      } else if (isLastGame('alien-hunt')) {
+      } else if (nextGame === 'completion') {
         router.push('/completion').catch(err => {
-          console.error('Navigation error:', err);
+        });
+      } else if (nextGame) {
+        router.push(`/games/${nextGame}`).catch(err => {
         });
       } else {
         router.push('/').catch(err => {
-          console.error('Navigation error:', err);
         });
       }
     }
@@ -641,11 +1358,11 @@ export default defineComponent({
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     }
     
-    function handleMouseDown() {
+    function handleMouseDown(event: MouseEvent) {
       mouseDown = true;
-      if (gameState.value === 'playing' && canShoot) {
-        shoot();
-      }
+      
+      // Dans le nouveau système, les clics sont gérés par les fonctions de sélection de canon
+      // Le tir manuel n'est plus utilisé
     }
     
     function handleMouseUp() {
@@ -660,6 +1377,7 @@ export default defineComponent({
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
     
+    // Ancienne fonction de tir maintenue pour compatibilité
     function shoot() {
       if (!canShoot) return;
       
@@ -671,6 +1389,13 @@ export default defineComponent({
       setTimeout(() => {
         canShoot = true;
       }, shootCooldown);
+    }
+    
+    // Vérifier si les conditions de victoire sont remplies
+    function checkWinCondition() {
+      if (score.value >= winScore) {
+        endGame(true);
+      }
     }
     
     // Animation et Logique de jeu
@@ -688,8 +1413,17 @@ export default defineComponent({
       // Mettre à jour la position des balles
       updateBullets();
       
+      // Mettre à jour les traceurs
+      updateTracers();
+      
+      // Mettre à jour les effets visuels des canons (mais pas leurs rotations qui sont gérées en temps réel)
+      updateCannonEffects();
+      
       // Vérifier les collisions
       checkCollisions();
+      
+      // Vérifier les conditions de victoire
+      checkWinCondition();
       
       // Faire tourner les étoiles pour un effet de mouvement
       if (stars) {
@@ -697,11 +1431,47 @@ export default defineComponent({
         stars.rotation.y += 0.0001;
       }
       
-      // Vérifier les conditions de victoire
-      checkWinCondition();
+      // Forcer un rendu de haute priorité pour les canons actifs
+      // Cela assurera que les canons suivent le curseur avec la plus grande fluidité possible
+      for (let i = 0; i < cannons.value.length; i++) {
+        if (cannons.value[i].isAiming && i < cannonsObjects.length) {
+          const cannon = cannonsObjects[i];
+          if (cannon.children.length > 1) {
+            const rotationRadians = (cannons.value[i].rotation * Math.PI) / 180;
+            cannon.children[1].rotation.z = rotationRadians;
+          }
+        }
+      }
       
       // Rendu de la scène
       renderer.render(scene, camera);
+    }
+    
+    function updateCannonEffects() {
+      // Mettre à jour uniquement les effets visuels des canons (pas les rotations)
+      for (let i = 0; i < cannonsObjects.length; i++) {
+        if (i >= cannons.value.length) continue;
+        
+        const cannon = cannonsObjects[i];
+        
+        // Appliquer des effets visuels au canon
+        if (cannon.children.length > 1) {
+          // Si le canon est en mode visée, ajouter un effet visuel
+          if (cannons.value[i].isAiming) {
+            // Changer la couleur ou ajouter un effet de brillance
+            if (cannon.children[1].material) {
+              cannon.children[1].material.emissive = new THREE.Color(0x555555);
+              cannon.children[1].material.emissiveIntensity = 0.7;
+            }
+          } else {
+            // Remettre l'apparence normale
+            if (cannon.children[1].material) {
+              cannon.children[1].material.emissive = new THREE.Color(0x000000);
+              cannon.children[1].material.emissiveIntensity = 0;
+            }
+          }
+        }
+      }
     }
     
     function updateAlienShips() {
@@ -774,6 +1544,9 @@ export default defineComponent({
       // Vérifier les collisions entre les balles et les vaisseaux
       for (let i = bullets.length - 1; i >= 0; i--) {
         const bullet = bullets[i];
+        const bulletData = objectData.get(bullet) as BulletData;
+        
+        if (!bulletData) continue;
         
         // Vérifier les collisions avec les vaisseaux aliens
         for (let j = alienShips.length - 1; j >= 0; j--) {
@@ -782,13 +1555,16 @@ export default defineComponent({
           // Calculer la distance entre la balle et le vaisseau
           const distance = bullet.position.distanceTo(ship.position);
           
+          // Augmenter la zone de collision pour faciliter les tirs
+          const hitRadius = 2.0; // Rayon de collision encore plus grand pour faciliter les hits
+          
           // Si la distance est inférieure à un seuil, c'est une collision
-          if (distance < 1.2) {
+          if (distance < hitRadius) {
             // Ajouter des points au score
-            const data = objectData.get(ship);
-            if (data) {
-              score.value += data.value;
-            }
+            score.value += 1;
+            
+            // Créer un effet d'explosion
+            createExplosion(ship.position.clone(), 0x9933ff);
             
             // Retirer le vaisseau et la balle
             scene.remove(ship);
@@ -809,13 +1585,13 @@ export default defineComponent({
             // Calculer la distance entre la balle et le vaisseau
             const distance = bullet.position.distanceTo(ship.position);
             
+            // Rayon de collision plus petit pour les vaisseaux amis afin de rendre le jeu plus équilibré
+            const hitRadius = 1.2; // Collision plus précise pour les vaisseaux amis, facilitant le jeu
+            
             // Si la distance est inférieure à un seuil, c'est une collision
-            if (distance < 1.2) {
-              // Retirer des points au score
-              const data = objectData.get(ship);
-              if (data) {
-                score.value += data.value; // Valeur négative pour les vaisseaux amis
-              }
+            if (distance < hitRadius) {
+              // Créer un effet d'explosion
+              createExplosion(ship.position.clone(), 0x33cc77);
               
               // Retirer le vaisseau et la balle
               scene.remove(ship);
@@ -823,10 +1599,8 @@ export default defineComponent({
               friendlyShips.splice(j, 1);
               bullets.splice(i, 1);
               
-              // Vérifier si le joueur a perdu
-              if (score.value < 0) {
-                endGame(false); // Game over
-              }
+              // Pénalité pour avoir touché un vaisseau ami
+              score.value = Math.max(0, score.value - 2);
               
               // Sortir de la boucle interne
               break;
@@ -836,11 +1610,79 @@ export default defineComponent({
       }
     }
     
-    function checkWinCondition() {
-      // Le joueur gagne s'il atteint un certain score
-      if (score.value >= winScore) {
-        endGame(true); // Victoire
+    function createExplosion(position: THREE.Vector3, color: number) {
+      // Créer une explosion temporaire
+      const particleCount = 15;
+      const explosionGeometry = new THREE.BufferGeometry();
+      const explosionMaterial = new THREE.PointsMaterial({
+        color: color,
+        size: 0.3,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        opacity: 1
+      });
+      
+      const positions = new Float32Array(particleCount * 3);
+      const velocities: THREE.Vector3[] = [];
+      
+      // Initialiser les particules
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        positions[i3] = position.x;
+        positions[i3 + 1] = position.y;
+        positions[i3 + 2] = position.z;
+        
+        // Créer une vitesse aléatoire pour chaque particule
+        velocities.push(new THREE.Vector3(
+          (Math.random() - 0.5) * 0.2,
+          (Math.random() - 0.5) * 0.2,
+          (Math.random() - 0.5) * 0.2
+        ));
       }
+      
+      explosionGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(positions, 3)
+      );
+      
+      const explosion = new THREE.Points(explosionGeometry, explosionMaterial);
+      
+      scene.add(explosion);
+      
+      // Animer l'explosion et la supprimer après
+      let frame = 0;
+      const maxFrames = 30;
+      
+      const animateExplosion = () => {
+        frame++;
+        
+        // Mettre à jour la position des particules
+        const positions = explosion.geometry.attributes.position.array as Float32Array;
+        
+        for (let i = 0; i < particleCount; i++) {
+          const i3 = i * 3;
+          positions[i3] += velocities[i].x;
+          positions[i3 + 1] += velocities[i].y;
+          positions[i3 + 2] += velocities[i].z;
+        }
+        
+        explosion.geometry.attributes.position.needsUpdate = true;
+        
+        // Faire disparaître progressivement
+        if (explosion.material instanceof THREE.PointsMaterial) {
+          explosion.material.opacity = 1 - (frame / maxFrames);
+        }
+        
+        // Continuer l'animation ou supprimer
+        if (frame < maxFrames) {
+          requestAnimationFrame(animateExplosion);
+        } else {
+          scene.remove(explosion);
+        }
+      };
+      
+      // Démarrer l'animation
+      animateExplosion();
     }
     
     // Cycle de vie du composant
@@ -858,6 +1700,10 @@ export default defineComponent({
         cancelAnimationFrame(animationFrameId);
       }
       
+      if (requestAnimationId) {
+        cancelAnimationFrame(requestAnimationId);
+      }
+      
       if (alienSpawnTimer) {
         clearInterval(alienSpawnTimer);
       }
@@ -866,23 +1712,170 @@ export default defineComponent({
         clearInterval(friendlySpawnTimer);
       }
       
+      // Nettoyer les callbacks de suivi de souris
+      mouseMoveCallbacks.clear();
+      isMouseUpdateRunning = false;
+      
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('resize', handleResize);
     });
     
+   
+    
+    const touchStartX = ref(0);
+    const touchStartY = ref(0);
+    const touchCurrentX = ref(0);
+    const touchCurrentY = ref(0);
+    const touchSelectedCannon = ref(-1);
+    const isTouching = ref(false);
+
+    // Fonctions de gestion des événements tactiles
+    // Mettre à jour les gestionnaires d'événements tactiles avec une implémentation simplifiée
+const handleTouchStart = (event: TouchEvent) => {
+  event.preventDefault();
+  const touch = event.touches[0];
+  const rect = gameContainer.value.getBoundingClientRect();
+  
+  // Calculer la position de toucher normalisée pour le raycaster
+  mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  // Utiliser la même logique que handleMouseDown pour détecter et sélectionner les canons
+  raycaster.setFromCamera(mouse, camera);
+  
+  // Intersect avec les modèles de canons pour voir lequel est touché
+  const intersects = raycaster.intersectObjects(cannonsObjects, true);
+  
+  if (intersects.length > 0) {
+    // Trouver le canon correspondant
+    for (let i = 0; i < cannonsObjects.length; i++) {
+      if (intersects[0].object.parent === cannonsObjects[i] || 
+          intersects[0].object === cannonsObjects[i]) {
+        
+        // Vérifier si le canon peut tirer
+        if (!cannons.value[i].canShoot) return;
+        
+        // Sélectionner le canon et initialiser le viseur
+        selectedCannon.value = i;
+        cannons.value[i].isAiming = true;
+        
+        // Stocker la position du toucher pour le viseur
+        cannons.value[i].aimPosition = {
+          x: touch.clientX,
+          y: touch.clientY
+        };
+        
+        // Calculer l'angle initial pour le canon
+        const cannonPos = {
+          x: window.innerWidth * ((i + 1) * 0.2),
+          y: window.innerHeight - 50
+        };
+        
+        const dx = touch.clientX - cannonPos.x;
+        const dy = cannonPos.y - touch.clientY;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const clampedAngle = Math.min(Math.max(angle, 0), 180);
+        
+        // Mettre à jour la rotation du canon
+        cannons.value[i].rotation = clampedAngle - 90;
+        cannons.value[i].aimRotation = clampedAngle;
+        
+        // Créer un traceur visuel
+        createTracer(i, clampedAngle);
+        
+        break;
+      }
+    }
+  }
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  event.preventDefault();
+  if (selectedCannon.value === -1) return;
+  
+  const cannonIndex = selectedCannon.value;
+  const touch = event.touches[0];
+  
+  // Stocker la position du toucher pour le viseur
+  cannons.value[cannonIndex].aimPosition = {
+    x: touch.clientX,
+    y: touch.clientY
+  };
+  
+  // Calculer le nouvel angle pour le canon
+  const cannonPos = {
+    x: window.innerWidth * ((cannonIndex + 1) * 0.2),
+    y: window.innerHeight - 50
+  };
+  
+  const dx = touch.clientX - cannonPos.x;
+  const dy = cannonPos.y - touch.clientY;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+  const clampedAngle = Math.min(Math.max(angle, 0), 180);
+  
+  // Mettre à jour la rotation du canon
+  cannons.value[cannonIndex].rotation = clampedAngle - 90;
+  cannons.value[cannonIndex].aimRotation = clampedAngle;
+  
+  // Mettre à jour le traceur visuel
+  // Supprimer les anciens traceurs
+  for (let i = tracers.length - 1; i >= 0; i--) {
+    const tracer = tracers[i];
+    const data = objectData.get(tracer);
+    if (data && data.player === cannonIndex) {
+      scene.remove(tracer);
+      tracers.splice(i, 1);
+    }
+  }
+  
+  // Créer un nouveau traceur
+  createTracer(cannonIndex, clampedAngle);
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  event.preventDefault();
+  if (selectedCannon.value === -1) return;
+  
+  const cannonIndex = selectedCannon.value;
+  
+  // Tirer depuis le canon
+  shootFromCannon(cannonIndex);
+  
+  // Réinitialiser l'état
+  cannons.value[cannonIndex].isAiming = false;
+  selectedCannon.value = -1;
+};
+
+    // Fonction pour obtenir l'index du canon à partir de la position tactile
+    function getCannonIndexFromTouch(touch: Touch): number {
+      const rect = gameContainer.value.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const cannonWidth = rect.width / 4; // Assuming 4 cannons
+      return Math.floor(x / cannonWidth);
+    }
+    
     return {
       gameState,
-      score,
       gameTime,
+      score,
       formattedTime,
       gameContainer,
       startGame,
       restartGame,
       returnToMenu,
       endGame,
-      continueToNextGame
+      continueToNextGame,
+      // Cannons management
+      cannons,
+      selectedCannon,
+      selectCannon,
+      playerColors,
+      playerNames,
+      showInstructions,
+      gameInstructions ,
+      onInstructionComplete
     };
   }
 });
@@ -935,14 +1928,26 @@ export default defineComponent({
   color: white;
   font-size: 1.2rem;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-
-.score, .timer {
-  margin-bottom: 10px;
+.game-over {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+.timer, .score, .current-player {
   background: rgba(25, 10, 41, 0.6);
   padding: 0.5rem 1rem;
   border-radius: 5px;
   border: 1px solid #b090ff;
+}
+
+.current-player {
+  font-weight: bold;
 }
 
 h1 {
@@ -956,7 +1961,19 @@ h2 {
   font-size: 1.2rem;
   margin: 1rem 0;
 }
-
+.game-instructions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 20, 50, 0.9);
+  padding: 30px;
+  border-radius: 15px;
+  border: 2px solid #00d1ff;
+  text-align: center;
+  max-width: 80%;
+  z-index: 15;
+}
 button {
   background: linear-gradient(to bottom, #3d1a70, #2b0d51);
   color: white;
@@ -981,5 +1998,153 @@ button:hover {
 
 .instructions p {
   margin: 0.5rem 0;
+}
+
+/* Cannon CSS representation */
+.cannons-container {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.cannon {
+  position: absolute;
+  bottom: 0;
+  width: 50px;
+  height: 80px;
+  transform-origin: bottom center;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.cannon-base {
+  position: absolute;
+  bottom: 0;
+  left: 10px;
+  width: 30px;
+  height: 20px;
+  border-radius: 50% 50% 0 0;
+  background: #333;
+}
+
+.cannon-barrel {
+  position: absolute;
+  bottom: 15px;
+  left: 17.5px;
+  width: 15px;
+  height: 50px;
+  background: #555;
+  border-radius: 15px 15px 0 0;
+  transform-origin: bottom center;
+}
+
+.cannon.active .cannon-base, 
+.cannon:hover .cannon-base {
+  box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.7);
+}
+
+.cannon:nth-child(1) .cannon-base {
+  background: #FF5252;
+}
+
+.cannon:nth-child(2) .cannon-base {
+  background: #4CAF50;
+}
+
+.cannon:nth-child(3) .cannon-base {
+  background: #2196F3;
+}
+
+.cannon:nth-child(4) .cannon-base {
+  background: #FFC107;
+}
+
+/* Indicator pour le rechargement des canons */
+.reload-indicator {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-top: 3px solid transparent;
+  top: -10px;
+  left: 10px;
+  animation: spin 1s linear infinite;
+  z-index: 6;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.cannon.reloading .cannon-base {
+  opacity: 0.6;
+}
+
+/* Aim tracer */
+.aim-tracer {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  z-index: 4;
+  pointer-events: none;
+  animation: pulse 0.7s infinite alternate;
+}
+
+.aim-tracer-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: white;
+  box-shadow: 0 0 6px 2px white;
+}
+
+@keyframes pulse {
+  0% { transform: translate(-50%, -50%) scale(0.8); }
+  100% { transform: translate(-50%, -50%) scale(1.2); }
+}
+
+/* Style pour les canons en mode visée */
+.cannon.active .cannon-barrel {
+  /* Montrer visuellement que le canon est actif pour le tir */
+  box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.5);
+  transform-origin: bottom center;
+  transition: all 0.1s ease-out;
+}
+
+/* Player names display */
+.player-names {
+  position: absolute;
+  display: flex;
+  justify-content: space-around;
+  top: 10px;
+  right: 20px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 10px;
+  border-radius: 5px;
+}
+
+.player-name {
+  font-weight: bold;
+  margin: 0 10px;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+  font-size: 1rem;
+}
+
+@keyframes popup {
+  0% { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 </style>

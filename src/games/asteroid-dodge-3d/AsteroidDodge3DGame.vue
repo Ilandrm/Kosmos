@@ -2,68 +2,40 @@
   <div class="game-container">
     <div ref="gameContainer" class="game-canvas-container"></div>
     
-    <!-- UI overlay -->
-    <div v-if="gameState !== 'playing'" class="game-overlay">
-      <div v-if="gameState === 'menu'" class="menu">
-        <h1>ASTEROID DODGE 3D</h1>
-        <button @click="startGame" class="start-btn">START GAME</button>
-        <button @click="showHighScores" class="highscores-btn">HIGH SCORES</button>
-        <div class="instructions">
-          <h2>Instructions</h2>
-          <p>Cliquez et glissez pour déplacer votre vaisseau.</p>
-          <p>Évitez les collisions avec les astéroïdes pour survivre!</p>
-          <p>Collectez les bonus pour des points supplémentaires.</p>
-        </div>
+    <!-- Game Instructions Overlay -->
+    <GameInstruction
+      v-if="showInstructions"
+      :title="gameInstructions.title"
+      :players="gameInstructions.players"
+      :time="gameInstructions.time"
+      :instruction="gameInstructions.instruction"
+      @start="onInstructionComplete"
+    />
+    
+    <!-- UI overlay - This must show when game is over -->
+    <div v-if="(gameState !== 'playing' && !showInstructions) || gameState === 'game-over'" class="game-overlay">
+      <!-- Debug information -->
+      <div class="debug-info" style="position: absolute; top: 5px; left: 5px; font-size: 12px; color: white; z-index: 100;">
+        Game State: {{ gameState }} | Time: {{ timeRemaining }}
       </div>
-      
+      <!-- Show game-over UI when state is game-over -->
       <div v-if="gameState === 'game-over'" class="game-over">
-        <h1>GAME OVER</h1>
-        <h2>Score: {{ finalScore }}</h2>
+        <h1>{{gameCount > 1 ? "MISSION TERMINÉE" :"SECOND JOUEUR"}}</h1>
         
-        <div v-if="isHighScore" class="new-highscore">
-          <h3>NEW HIGH SCORE!</h3>
-          <input 
-            v-model="playerName" 
-            placeholder="Enter your name" 
-            maxlength="10"
-            ref="nameInput"
-          />
-          <button @click="saveHighScore" :disabled="!playerName.trim()">
-            SAVE
-          </button>
-        </div>
-        
-        <button @click="restartGame" class="restart-btn">PLAY AGAIN</button>
-        <button @click="returnToMenu" class="menu-btn">MAIN MENU</button>
-        <button @click="continueToNextGame" class="continue-btn">Continuer</button>
-      </div>
-      
-      <div v-if="gameState === 'high-scores'" class="high-scores">
-        <h1>HIGH SCORES</h1>
-        <div class="scores-list">
-          <div v-for="(score, index) in highScores" :key="index" class="score-entry">
-            <span class="rank">{{ index + 1 }}</span>
-            <span class="name">{{ score.name }}</span>
-            <span class="score">{{ score.score }}</span>
-            <span class="date">{{ score.date }}</span>
-          </div>
-        </div>
-        <button @click="returnToMenu" class="back-btn">BACK</button>
+        <button @click="continueToNextGame" class="continue-btn">{{gameCount > 1 ? "Continuer la mission" :"Commencer"}} </button>
       </div>
       
       <div v-if="gameState === 'paused'" class="paused">
         <h1>PAUSED</h1>
         <button @click="resumeGame" class="resume-btn">RESUME</button>
-        <button @click="returnToMenu" class="menu-btn">MAIN MENU</button>
       </div>
     </div>
     
     <!-- HUD overlay for displaying score and lives during gameplay -->
     <div v-if="gameState === 'playing'" class="game-hud">
-      <div class="score">SCORE: {{ currentScore }}</div>
-      <div class="time">TIME: {{ Math.ceil(timeRemaining) }}s</div>
+      <div class="time">TEMPS: {{ timeRemaining }}s</div>
       <div class="lives">
-        LIVES: 
+        VIES: 
         <span v-for="n in lives" :key="n" class="life-icon">▲</span>
       </div>
     </div>
@@ -75,22 +47,37 @@ import { defineComponent, ref, onMounted, onUnmounted, watch } from 'vue';
 import GameEngine3D from './GameEngine3D';
 import ScoreManager from './ScoreManager'; // Utiliser le nouveau ScoreManager
 import { useRouter } from 'vue-router';
-import { getNextGame, isLastGame } from '../../services/GameFlowService';
+import { getNextGame, isLastGame, getGameInstructions, handleHighScore } from '@/services/GameFlowService';
+import GameInstruction from '../../components/GameInstruction.vue'; // Importing GameInstruction component
+import TurnPopup from '@/components/TurnPopup.vue';
 
 export default defineComponent({
   name: 'AsteroidDodge3DGame',
+  components: { GameInstruction, TurnPopup }, // Registering GameInstruction and TurnPopup components
   
   setup() {
+    const showTurnPopup = ref(false); // Track visibility of the turn popup
+    const turnMessage = ref(''); // Message to display in the turn popup
+    const totalRounds = 2; // Total rounds to play
+    let currentRound = ref(0); // Track the current round
+    let isPlayerTurn = ref(true); // Track whose turn it is
     const gameContainer = ref<HTMLElement | null>(null);
-    const gameState = ref<'menu' | 'playing' | 'paused' | 'game-over' | 'high-scores'>('menu');
-    const currentScore = ref<number>(0);
-    const finalScore = ref<number>(0);
-    const timeRemaining = ref<number>(60);
+      const currentScore = ref<number>(0);
+    let finalScore = ref<number>(0);
+    let timeRemaining = ref<number>(30); // Set to 30 seconds for the game duration
     const lives = ref<number>(3);
     const isHighScore = ref<boolean>(false);
-    const playerName = ref<string>('');
+    let playerName = ref<string>('');
     const nameInput = ref<HTMLInputElement | null>(null);
-    const highScores = ref<any[]>([]);
+    let highScores = ref<any[]>([]);
+    const showInstructions = ref<boolean>(true); // Defining showInstructions property
+    const gameInstructions = ref(getGameInstructions('asteroid-dodge-3d') || {
+      title: 'Évitement d\'Astéroïdes',
+      players: '2 joueurs',
+      time: '30 secondes',
+      instruction: 'Les joueurs jouent à tour de rôle pour éviter les astéroïdes.'
+    });
+    let gameCount = ref(0); // Track the number of games played
     
     // Désactiver les logs de débogage pour de meilleures performances
     const DEBUG_MODE = false;
@@ -98,7 +85,7 @@ export default defineComponent({
     let gameEngine: GameEngine3D | null = null;
     const scoreManager = new ScoreManager();
     const router = useRouter();
-    
+  
     // Callbacks du moteur de jeu
     const scoreUpdated = (score: number) => {
       currentScore.value = score;
@@ -107,28 +94,29 @@ export default defineComponent({
     };
     
     const timeUpdated = (time: number) => {
-      timeRemaining.value = time;
+      // Ensure proper type and value checking
+      if (typeof time === 'number' && !isNaN(time)) {
+        // Directly assign the time to the reactive variable
+        timeRemaining.value = time;
+      } else {
+        // Keep current value if new value is invalid
+      }
     };
-    
+
     const livesUpdated = (remainingLives: number) => {
       lives.value = remainingLives;
     };
     
     const gameOver = (score: number) => {
       finalScore.value = score;
+      timeRemaining.value = 0; // Forcer le timer à 0
       gameState.value = 'game-over';
-      
-      // S'assurer que le score final est correctement enregistré dans le ScoreManager
-      scoreManager.updateCurrentScore(score);
-      
-      // Vérifier si c'est un meilleur score
-      isHighScore.value = scoreManager.isHighScore(score);
-      
-      // Gérer l'affichage du formulaire de high score
-      handleHighScore();
-    };
-    
-    // Fonction pour initialiser le moteur de jeu
+
+      // Incrémenter le compteur de parties
+      gameCount.value++;
+    }
+
+    // Function to initialize the game engine
     const initGame = () => {
       if (gameContainer.value) {
         gameEngine = new GameEngine3D(
@@ -142,7 +130,37 @@ export default defineComponent({
       }
     };
     
-    // Gérer les meilleurs scores
+    const screenToWorld = (x: number, y: number, rect: DOMRect) => {
+      const worldX = (x / rect.width) * 40 - 20; // Assuming the world width is 40
+      const worldY = -(y / rect.height) * 30; // Assuming the world height is 30
+      return { x: worldX, y: worldY };
+    };
+
+    const isTouchOnShip = (touchX: number, touchY: number, rect: DOMRect): boolean => {
+      const ship = gameEngine.getShip(); // Use the public method to access the ship
+      if (!gameEngine || !ship) return false;
+      
+      // Coordonnées du vaisseau dans le monde 3D
+      const shipInstance = gameEngine.getShip(); // Use the public method to access the ship
+      if (!gameEngine || !shipInstance) return false;
+      const shipX = shipInstance.position.x;
+      const shipY = shipInstance.position.y;
+      
+      // Convertir les coordonnées d'écran en coordonnées de monde
+      const worldCoords = screenToWorld(touchX, touchY, rect);
+      
+      // Calcul de la distance entre le point touché et le vaisseau
+      const distanceX = Math.abs(worldCoords.x - shipX);
+      const distanceY = Math.abs(worldCoords.y - shipY);
+      
+      // Taille approximative du vaisseau dans l'espace de jeu
+      const shipSizeX = 3;
+      const shipSizeY = 2;
+      
+      // Vérifier si le point est sur le vaisseau (avec une marge de tolérance pour faciliter le toucher)
+      return distanceX < shipSizeX && distanceY < shipSizeY;
+    };
+
     const handleHighScore = () => {
       if (isHighScore.value) {
         setTimeout(() => {
@@ -152,46 +170,26 @@ export default defineComponent({
         }, 100);
       }
     };
-    
-    // Actions du joueur
+
+    const onInstructionComplete = () => {
+      showInstructions.value = false;
+      startGame();
+    };
+
+    // Player actions
     const startGame = () => {
       gameState.value = 'playing';
       scoreManager.resetCurrentScore();
-      
+      timeRemaining.value = 30; // Set timer to 30 seconds at game start
+
       if (!gameEngine && gameContainer.value) {
         initGame();
       }
-      
+
       if (gameEngine) {
-        // Sécurité supplémentaire: réinitialiser l'entrée utilisateur
-        if (nameInput.value) {
-          nameInput.value.blur();
-        }
-        
-        // Délai plus long avant de démarrer le jeu pour s'assurer que tout est prêt
-        // et éviter le plantage à 1 seconde
-        setTimeout(() => {
-          try {
-            console.log('Démarrage du jeu...');
-            gameEngine.start();
-          } catch (error) {
-            console.error('Erreur au démarrage du jeu:', error);
-            // Tenter de réinitialiser en cas d'erreur
-            setTimeout(() => {
-              initGame();
-              // Réessayer avec un délai plus long
-              setTimeout(() => {
-                try {
-                  console.log('Seconde tentative de démarrage...');
-                  gameEngine?.start();
-                } catch (e) {
-                  console.error('Erreur critique, impossible de démarrer le jeu:', e);
-                  alert('Erreur au chargement du jeu. Veuillez rafraîchir la page.');
-                }
-              }, 500);
-            }, 500);
-          }
-        }, 800); // Délai plus long pour s'assurer que tout est bien initialisé
+        gameEngine.start();
+      } else {
+        // Game engine is not initialized.
       }
     };
     
@@ -236,11 +234,15 @@ export default defineComponent({
     };
     
     const continueToNextGame = () => {
-      const nextGame = getNextGame('asteroid-dodge');
+      const nextGame = getNextGame('asteroid-dodge-3d');
+      if(gameCount.value > 1 ){
       router.push({ name: nextGame });
+      }else{
+        startGame();
+      }
     };
     
-    // Gestion des touches du clavier (uniquement pour Escape/Pause)
+    // Keyboard event handling (only for Escape/Pause)
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && gameState.value === 'playing') {
         pauseGame();
@@ -249,319 +251,174 @@ export default defineComponent({
       }
     };
     
-    // SYSTÈME DE CONTRÔLE: Glisser-déposer UNIQUEMENT avec le vaisseau
-    // Variables pour le drag & drop
+    // Drag & drop system ONLY with the ship
     let isDragging = false;
-    let dragStartX = 0; // Position X du vaisseau au début du drag
-    let dragStartY = 0; // Position Y du vaisseau au début du drag
-    let mouseStartX = 0; // Position X de la souris au début du drag
-    let mouseStartY = 0; // Position Y de la souris au début du drag
+    let dragStartX = 0; // Ship's X position at the start of drag
+    let dragStartY = 0; // Ship's Y position at the start of drag
+    let mouseStartX = 0; // Mouse's X position at the start of drag
+    let mouseStartY = 0; // Mouse's Y position at the start of drag
     
-    // Gestion du début du glisser-déposer
+    // Handle the start of drag-and-drop
     const handleMouseDown = (event: MouseEvent) => {
       if (gameEngine && gameState.value === 'playing') {
-        // Réinitialiser l'état du drag
         isDragging = false;
-        
-        // Empêcher le comportement par défaut
         event.preventDefault();
         
-        // Vérifier si le clic est sur le vaisseau
         if (isClickOnShip(event)) {
           const shipPos = gameEngine.getShipWorldPosition();
           if (!shipPos) return;
           
-          // Enregistrer les positions initiales
           dragStartX = shipPos.x;
           dragStartY = shipPos.y;
           mouseStartX = event.clientX;
           mouseStartY = event.clientY;
           
-          // Activer le mode glisser-déposer
           isDragging = true;
-          
-          if (DEBUG_MODE) {
-            console.log('Début du glisser-déposer');
-            console.log(`Position initiale du vaisseau: ${dragStartX}`);
-            console.log(`Position initiale de la souris: ${mouseStartX}`);
-          }
-        } else if (DEBUG_MODE) {
-          console.log('Clic en dehors du vaisseau - ignoré');
         }
       }
     };
     
-    // Vérification si le clic est sur le vaisseau
     const isClickOnShip = (event: MouseEvent): boolean => {
       if (!gameEngine) return false;
       
       const shipPosition = gameEngine.getShipScreenPosition();
       if (!shipPosition) return false;
       
-      // Zone de clic élargie pour faciliter la sélection du vaisseau
-      const clickRadius = 60; // Rayon plus large pour une meilleure détection
+      const clickRadius = 60; // Wider click area for easier selection
       
       const dx = event.clientX - shipPosition.x;
       const dy = event.clientY - shipPosition.y;
       const distance = Math.sqrt(dx*dx + dy*dy);
       
-      if (DEBUG_MODE) {
-        console.log(`Click at (${event.clientX}, ${event.clientY})`);
-        console.log(`Ship at (${shipPosition.x}, ${shipPosition.y})`);
-        console.log(`Distance: ${distance}, Threshold: ${clickRadius}`);
-      }
-      
       return distance <= clickRadius;
     };
     
-    // Variable pour stocker le dernier timestamp de mise à jour
     let lastMoveTimestamp = 0;
-    // Intervalle minimum entre les mises à jour (en ms) pour éviter le lag
     const updateInterval = 8; // ~120 FPS
 
-    // Gestion du mouvement de la souris avec optimisation pour réduire le lag
     const handleMouseMove = (event: MouseEvent) => {
       if (isDragging && gameEngine && gameState.value === 'playing') {
-        // Limiter la fréquence des mises à jour pour éviter le lag
         const now = performance.now();
         if (now - lastMoveTimestamp < updateInterval) {
-          return; // Ignorer les mouvements trop fréquents
+          return; // Ignore too frequent movements
         }
         lastMoveTimestamp = now;
         
-        // Calculer le déplacement de la souris par rapport à sa position initiale
         const mouseDeltaX = event.clientX - mouseStartX;
-        const mouseDeltaY = mouseStartY - event.clientY; // Inversion car Y va de haut en bas dans le DOM
+        const mouseDeltaY = mouseStartY - event.clientY; // Inverted because Y goes top to bottom in the DOM
         
-        // Calculer le facteur d'échelle pour convertir les pixels en unités du monde
         const rect = gameContainer.value?.getBoundingClientRect();
         if (!rect) return;
         
-        // Augmenter légèrement la sensibilité pour un déplacement plus rapide
         const scaleFactorX = 50 / rect.width;
         const scaleFactorY = 50 / rect.height;
         
-        // Calculer la nouvelle position du vaisseau
         const newShipX = dragStartX + (mouseDeltaX * scaleFactorX);
         const newShipY = dragStartY + (mouseDeltaY * scaleFactorY);
         
-        // Limiter la position aux bornes du jeu
         const clampedX = Math.max(-20, Math.min(20, newShipX));
-        const clampedY = Math.max(-15, Math.min(0, newShipY)); // Limites verticales
+        const clampedY = Math.max(-15, Math.min(15, newShipY)); // Vertical limits
         
-        // Appliquer la position au vaisseau avec les deux coordonnées
         gameEngine.setMousePosition(clampedX, clampedY, true);
-        
-        if (DEBUG_MODE && mouseDeltaX % 40 === 0) { // Limiter les logs pour éviter le spam
-          console.log(`Mouse delta: ${mouseDeltaX}px, New ship position: ${clampedX}`);
-        }
       }
     };
     
-    // Gestion de la fin du glisser-déposer
     const handleMouseUp = () => {
-      if (isDragging && DEBUG_MODE) {
-        console.log('Fin du glisser-déposer');
-      }
       isDragging = false;
     };
     
-    // Détection de l'appareil mobile pour optimiser les contrôles
-    const isMobileDevice = (): boolean => {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    };
-    
-    // Convertit les coordonnées d'écran en coordonnées de monde 3D
-    const screenToWorld = (screenX: number, screenY: number, rect: DOMRect): {x: number, y: number} => {
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      
-      const offsetX = screenX - centerX;
-      const offsetY = centerY - screenY; // Inversé car Y va de haut en bas dans le DOM
-      
-      const worldX = (offsetX / rect.width) * 40; // Échelle horizontale (-20 à 20)
-      const worldY = (offsetY / rect.height) * 15; // Échelle verticale (-15 à 0)
-      
-      return {
-        x: worldX,
-        y: worldY
-      };
-    };
-    
-    // Vérifie si le point touché est sur le vaisseau
-    const isTouchOnShip = (touchX: number, touchY: number, rect: DOMRect): boolean => {
-      if (!gameEngine || !gameEngine.ship) return false;
-      
-      // Coordonnées du vaisseau dans le monde 3D
-      const shipX = gameEngine.ship.position.x;
-      const shipY = gameEngine.ship.position.y;
-      
-      // Convertir les coordonnées d'écran en coordonnées de monde
-      const worldCoords = screenToWorld(touchX, touchY, rect);
-      
-      // Calcul de la distance entre le point touché et le vaisseau
-      const distanceX = Math.abs(worldCoords.x - shipX);
-      const distanceY = Math.abs(worldCoords.y - shipY);
-      
-      // Taille approximative du vaisseau dans l'espace de jeu
-      const shipSizeX = 3;
-      const shipSizeY = 2;
-      
-      // Vérifier si le point est sur le vaisseau (avec une marge de tolérance pour faciliter le toucher)
-      return distanceX < shipSizeX && distanceY < shipSizeY;
-    };
-    
-    // Gestion du début d'interaction tactile
     const handleTouchStart = (event: TouchEvent) => {
+      event.preventDefault();
+      const touch = event.touches[0];
+      
       if (gameEngine && gameState.value === 'playing') {
-        // Empêcher le scroll par défaut
-        event.preventDefault();
+        isDragging = true;
         
-        // Utiliser le premier point de contact
-        if (event.touches.length > 0) {
-          const touch = event.touches[0];
-          const rect = gameContainer.value?.getBoundingClientRect();
-          
-          if (rect) {
-            const touchX = touch.clientX;
-            const touchY = touch.clientY;
-            
-            // Vérifier si le toucher est sur le vaisseau
-            if (isTouchOnShip(touchX, touchY, rect)) {
-              // Enregistrer la position initiale du toucher
-              mouseStartX = touchX;
-              mouseStartY = touchY;
-              
-              // Enregistrer la position actuelle du vaisseau
-              if (gameEngine.ship) {
-                dragStartX = gameEngine.ship.position.x;
-                dragStartY = gameEngine.ship.position.y;
-              }
-              
-              isDragging = true;
-              
-              if (DEBUG_MODE) {
-                console.log('Début du toucher sur le vaisseau');
-              }
-            }
-          } else {
-            // Si on n'a pas le rectangle, on ne peut pas déterminer si le toucher est sur le vaisseau
-            // Ne rien faire
-          }
+        const rect = gameContainer.value.getBoundingClientRect();
+        mouseStartX = touch.clientX;
+        mouseStartY = touch.clientY;
+        
+        // Obtenir la position actuelle du vaisseau
+        const shipPos = gameEngine.getShipWorldPosition();
+        if (shipPos) {
+          dragStartX = shipPos.x;
+          dragStartY = shipPos.y;
         }
       }
     };
-    
-    // Gestion du mouvement tactile
+
     const handleTouchMove = (event: TouchEvent) => {
+      event.preventDefault();
+      
       if (isDragging && gameEngine && gameState.value === 'playing') {
-        // Empêcher le scroll par défaut
-        event.preventDefault();
-        
-        // Limiter la fréquence des mises à jour pour éviter le lag
+        const touch = event.touches[0];
         const now = performance.now();
+        
         if (now - lastMoveTimestamp < updateInterval) {
-          return; // Ignorer les mouvements trop fréquents
+          return; // Ignore les mouvements trop fréquents
         }
         lastMoveTimestamp = now;
         
-        // Utiliser le premier point de contact
-        if (event.touches.length > 0) {
-          const touch = event.touches[0];
-          
-          // Calculer le déplacement du doigt par rapport à sa position initiale
-          const touchDeltaX = touch.clientX - mouseStartX;
-          const touchDeltaY = mouseStartY - touch.clientY; // Inversion car Y va de haut en bas dans le DOM
-          
-          // Calculer le facteur d'échelle pour convertir les pixels en unités du monde
-          const rect = gameContainer.value?.getBoundingClientRect();
-          if (!rect) return;
-          
-          // Augmenter davantage la sensibilité pour les appareils tactiles
-          // pour des mouvements plus réactifs avec moins d'effort
-          const scaleFactorX = 80 / rect.width;
-          const scaleFactorY = 50 / rect.height;
-          
-          // Calculer la nouvelle position du vaisseau (X et Y)
-          const newShipX = dragStartX + (touchDeltaX * scaleFactorX);
-          const newShipY = dragStartY + (touchDeltaY * scaleFactorY);
-          
-          // Limiter la position aux bornes du jeu
-          const clampedX = Math.max(-20, Math.min(20, newShipX));
-          const clampedY = Math.max(-15, Math.min(0, newShipY)); // Limites verticales
-          
-          // Appliquer la position au vaisseau (X et Y variables)
-          gameEngine.setMousePosition(clampedX, clampedY, true);
-          
-          if (DEBUG_MODE && touchDeltaX % 40 === 0) {
-            console.log(`Touch delta: ${touchDeltaX}px, New ship position: ${clampedX}`);
-          }
-        }
+        const rect = gameContainer.value?.getBoundingClientRect();
+        if (!rect) return;
+        
+        const touchDeltaX = touch.clientX - mouseStartX;
+        const touchDeltaY = mouseStartY - touch.clientY;
+        
+        const scaleFactorX = 50 / rect.width;
+        const scaleFactorY = 50 / rect.height;
+        
+        const newShipX = dragStartX + (touchDeltaX * scaleFactorX);
+        const newShipY = dragStartY + (touchDeltaY * scaleFactorY);
+        
+        const clampedX = Math.max(-20, Math.min(20, newShipX));
+        const clampedY = Math.max(-15, Math.min(15, newShipY));
+        
+        gameEngine.setMousePosition(clampedX, clampedY, true);
       }
     };
-    
-    // Gestion de la fin d'interaction tactile
-    const handleTouchEnd = (event: TouchEvent) => {
-      // Fin du drag tactile
-      if (isDragging && DEBUG_MODE) {
-        console.log('Fin du toucher tactile');
-      }
+
+    const handleTouchEnd = () => {
+      // Logique pour quand le toucher se termine
       isDragging = false;
-      
-      // Empêcher le scroll par défaut sur l'événement de fin de toucher
-      event.preventDefault();
     };
-    
-    // Gestion de la visibilité de la page (mettre en pause si l'onglet est inactif)
+
+    const preventDefaultTouchMove = (event: TouchEvent) => {
+      if (gameState.value === 'playing') {
+        event.preventDefault();
+      }
+    };
+
     const handleVisibilityChange = () => {
       if (document.hidden && gameState.value === 'playing') {
         pauseGame();
       }
     };
-    
-    // Fonction pour empêcher le défilement sur les appareils mobiles
-    const preventDefaultTouchMove = (e: TouchEvent) => {
-      if (gameState.value === 'playing') {
-        e.preventDefault();
-      }
-    };
-    
-    // Nous ajouterons cet écouteur d'événements dans onMounted
-    
-    // Cycle de vie du composant
-    const gameTimer = ref<number | null>(null);
-    
+
+    const gameState = ref('menu'); // Valeurs possibles: 'menu', 'playing', 'paused', 'game-over', 'high-scores'
+
+    // Ajoutez les écouteurs d'événements
     onMounted(() => {
-      // Initialiser le jeu
       initGame();
       
-      // Empêcher le zoom et le défilement sur les appareils mobiles
       document.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
       
-      // Ajouter les écouteurs d'événements
       window.addEventListener('keydown', handleKeyDown);
       if (gameContainer.value) {
-        // Ajouter les écouteurs d'événements mouse uniquement sur le container du jeu
         gameContainer.value.addEventListener('mousedown', handleMouseDown);
         gameContainer.value.addEventListener('mousemove', handleMouseMove);
         gameContainer.value.addEventListener('mouseup', handleMouseUp);
-        gameContainer.value.addEventListener('mouseleave', handleMouseUp); // Arrêter le drag si on sort du conteneur
+        gameContainer.value.addEventListener('mouseleave', handleMouseUp);
         
-        // Ajouter les écouteurs d'événements tactiles
         gameContainer.value.addEventListener('touchstart', handleTouchStart);
         gameContainer.value.addEventListener('touchmove', handleTouchMove);
         gameContainer.value.addEventListener('touchend', handleTouchEnd);
         gameContainer.value.addEventListener('touchcancel', handleTouchEnd);
       }
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      gameTimer.value = setTimeout(() => {
-        endGame();
-      }, 30000);
     });
-    
+
     onUnmounted(() => {
-      // Retirer les écouteurs d'événements
       document.removeEventListener('touchmove', preventDefaultTouchMove);
       window.removeEventListener('keydown', handleKeyDown);
       if (gameContainer.value) {
@@ -570,7 +427,6 @@ export default defineComponent({
         gameContainer.value.removeEventListener('mouseup', handleMouseUp);
         gameContainer.value.removeEventListener('mouseleave', handleMouseUp);
         
-        // Retirer les écouteurs d'événements tactiles
         gameContainer.value.removeEventListener('touchstart', handleTouchStart);
         gameContainer.value.removeEventListener('touchmove', handleTouchMove);
         gameContainer.value.removeEventListener('touchend', handleTouchEnd);
@@ -581,23 +437,16 @@ export default defineComponent({
       if (gameEngine) {
         gameEngine.dispose();
       }
-      
-      clearTimeout(gameTimer.value);
     });
     
-    // Surveiller les changements d'état pour effectuer des actions supplémentaires
     watch(gameState, (newState) => {
       if (newState === 'game-over') {
         // Animations ou sons pour la fin de jeu pourraient être ajoutés ici
       }
     });
     
-    function endGame() {
-      gameState.value = 'game-over';
-      // Optionally call continueToNextGame() here
-    }
-    
     return {
+      gameCount,
       gameContainer,
       gameState,
       currentScore,
@@ -615,7 +464,11 @@ export default defineComponent({
       returnToMenu,
       showHighScores,
       saveHighScore,
-      continueToNextGame
+      continueToNextGame,
+      showInstructions,
+      gameInstructions,
+      onInstructionComplete,
+      handleHighScore // Added to return statement
     };
   }
 });
@@ -738,6 +591,7 @@ button:disabled {
   align-items: center;
   margin: 20px 0;
   padding: 20px;
+  padding: 20px;
   background-color: rgba(255, 215, 0, 0.2);
   border-radius: 10px;
   border: 1px solid rgba(255, 215, 0, 0.5);
@@ -757,7 +611,7 @@ input {
   border-radius: 5px;
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
-  font-size: 1.2rem;
+  color: white;
   text-align: center;
 }
 

@@ -1,8 +1,19 @@
 <template>
   <div class="quiz-game-container">
     <div class="stars" ref="starsContainer"></div>
-    
-    <div id="quiz-container">
+    <div class="game-instruction-background" v-if="showInstructions">
+      <GameInstruction
+        :title="gameInstructions.title"
+        :players="gameInstructions.players"
+        :time="gameInstructions.time"
+        :instruction="gameInstructions.instruction"
+        @start="onInstructionComplete"
+      />
+    </div>
+    <div id="quiz-container" v-else>
+      <div class="timer-display" v-if="!gameOver">
+        Temps restant: {{ timeRemaining }} secondes
+      </div>
       <template v-if="!gameOver">
         <div class="quiz-content-wrapper">
           <div class="quiz-question">
@@ -29,6 +40,7 @@
         <h2>Félicitations !</h2>
         <p>Vous avez terminé le quiz avec succès !</p>
         <button class="quiz-option" @click="restartGame">Recommencer</button>
+        <button class="quiz-option continue-btn" @click="continueToNextGame">Continuer</button>
       </div>
     </div>
   </div>
@@ -36,6 +48,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { getNextGame } from '@/services/GameFlowService'
+import GameInstruction from '../../components/GameInstruction.vue';
 
 // Questions du quiz
 const questions = [
@@ -92,7 +107,15 @@ const gameOver = ref(false)
 const answered = ref(false)
 const answerSelected = ref(-1)
 const starsContainer = ref<HTMLElement | null>(null)
-
+const router = useRouter()
+const timeRemaining = ref(0)
+const showInstructions = ref(true)
+const gameInstructions =  {
+  title: "Quizz",
+  players: "1 joueurs",
+  time: "50 secondes",
+  instruction: "Donnez la bonne réponse parmi les 4 propositions"
+}
 const currentQuestionData = computed(() => {
   // S'assurer qu'une question existe avant de l'accéder
   if (shuffledQuestions.value && shuffledQuestions.value.length > 0 && 
@@ -107,6 +130,8 @@ const currentQuestionData = computed(() => {
   };
 })
 
+let timerInterval = null; // Déclaration en haut du script
+
 function shuffleArray(array: any[]) {
   const newArray = [...array]
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -115,7 +140,11 @@ function shuffleArray(array: any[]) {
   }
   return newArray
 }
-
+function onInstructionComplete() {
+      showInstructions.value = false;
+      startGame();
+    }
+  
 function startGame() {
   // S'assurer que questions est bien défini
   if (questions && questions.length > 0) {
@@ -124,9 +153,22 @@ function startGame() {
     gameOver.value = false
     answered.value = false
     answerSelected.value = -1
-    console.log('Quiz Koesio initialisé avec', shuffledQuestions.value.length, 'questions')
+    timeRemaining.value = 50; // Set timer to 50 seconds at game start
+
+    // Nettoyer l'ancien intervalle s'il existe
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    // Démarrer le timer
+    timerInterval = setInterval(() => {
+      if (timeRemaining.value > 0) {
+        timeRemaining.value--;
+      } else {
+        clearInterval(timerInterval);
+        gameOver.value = true; // Fin du jeu lorsque le temps est écoulé
+      }
+    }, 1000);
   } else {
-    console.error('Aucune question disponible pour le quiz!')
   }
 }
 
@@ -156,6 +198,19 @@ function goToNextQuestion() {
 
 function restartGame() {
   startGame()
+}
+
+function continueToNextGame() {
+  const nextGame = getNextGame('koesio-quiz')
+  if (nextGame === 'maze-3d') {
+    router.push('/games/maze-3d')
+  } else if (nextGame === 'completion') {
+    router.push('/completion')
+  } else if (nextGame) {
+    router.push(`/games/${nextGame}`)
+  } else {
+    router.push('/')
+  }
 }
 
 function createStars() {
@@ -248,7 +303,27 @@ onMounted(() => {
   opacity: 0;
   animation: twinkle 3s infinite;
 }
-
+.game-instruction-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: black;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 15;
+}
+.game-instructions {
+  position: relative;
+  background: rgba(0, 20, 50, 0.9);
+  padding: 30px;
+  border-radius: 15px;
+  border: 2px solid #00d1ff;
+  text-align: center;
+  max-width: 80%;
+}
 .shooting-star {
   position: fixed;
   width: 2px;
@@ -285,6 +360,7 @@ onMounted(() => {
   width: 100%;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 2;
@@ -340,6 +416,13 @@ onMounted(() => {
 .quiz-option.incorrect {
   background: #ff0000;
   color: white;
+}
+
+.timer-display {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #00d1ff;
+  margin-bottom: 20px;
 }
 
 .victory-message {

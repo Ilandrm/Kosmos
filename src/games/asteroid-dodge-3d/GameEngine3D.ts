@@ -17,6 +17,11 @@ export default class GameEngine3D {
 
   // Game objects
   private ship: Ship3D | null = null;
+
+  // Public getter for ship
+  public getShip(): Ship3D | null {
+    return this.ship;
+  }
   private planets: Planet3D[] = [];
   private bonuses: Bonus3D[] = [];
   
@@ -28,7 +33,7 @@ export default class GameEngine3D {
   private spawnTimer: number = 0;
   private score: number = 0;
   private lives: number = 3;
-  private gameTime: number = 60; // 60 seconds game time
+  private gameTime: number = 30; // 60 seconds game time
   private fpsCounter: number = 0;
   private lastFpsUpdate: number = 0;
   private gameContainer: HTMLElement;
@@ -543,7 +548,8 @@ export default class GameEngine3D {
       // S'assurer que les targets sont toujours transmises avec le flag isDragging=true
       // pour que Ship3D sache qu'il s'agit d'un mouvement intentionnel
       this.ship.setTargetX(mouseX, true);
-      this.ship.setTargetY(mouseY, true);
+      const clampedY = Math.max(-15, Math.min(15, mouseY)); // Allow higher movement on Y-axis
+      this.ship.setTargetY(clampedY, true);
     } else {
       // Si isDragging est false, explicitement réinitialiser les targets
       // pour empêcher tout mouvement automatique
@@ -642,7 +648,7 @@ export default class GameEngine3D {
     this.score = 0;
     this.lives = 3;
     this.difficulty = 0;
-    this.gameTime = 60;
+    this.gameTime = 30;
     this.spawnTimer = 0;
     
     // Réinitialiser l'animation d'introduction - préparer pour qu'elle s'exécute
@@ -697,7 +703,6 @@ export default class GameEngine3D {
         // Orienter le vaisseau vers la caméra
         this.ship.mesh.rotation.x = Math.PI / 3; // Incliner davantage pour mieux voir l'animation
       } catch (error) {
-        console.error('Erreur lors de la création du vaisseau:', error);
         // Récupération en créant un vaisseau simple
         const shipGroup = new THREE.Group();
         this.scene.add(shipGroup);
@@ -718,21 +723,17 @@ export default class GameEngine3D {
       // Démarrer l'animation avec un délai pour s'assurer que tout est prêt
       setTimeout(() => {
         try {
-          console.log('Animation démarrée');
           this.animate();
         } catch (error) {
-          console.error('Erreur lors du démarrage de l\'animation:', error);
         }
       }, 200);
     } catch (error) {
-      console.error('Erreur lors du démarrage du jeu:', error);
       // Tenter de récupérer de l'erreur
       setTimeout(() => {
         try {
           this.init();
           this.start();
         } catch (e) {
-          console.error('Impossible de récupérer après erreur:', e);
         }
       }, 1000);
     }
@@ -771,7 +772,6 @@ export default class GameEngine3D {
         this.ship.setTargetY(0, false);
       }
       
-      console.log('Animation d\'introduction terminée, mouvements libres activés');
       
       // Terminer l'animation et commencer le jeu réel
       this.isIntroPlaying = false;
@@ -881,7 +881,6 @@ export default class GameEngine3D {
           try {
             this.update(deltaTime);
           } catch (error) {
-            console.error('Erreur dans update:', error);
           }
         }
       }
@@ -911,15 +910,12 @@ export default class GameEngine3D {
           this.renderer.render(this.scene, this.camera);
         }
       } catch (error) {
-        console.error('Erreur dans le rendu:', error);
       }
       
       requestAnimationFrame(this.animate.bind(this));
     } catch (error) {
-      console.error('Erreur fatale dans animate:', error);
       // Tenter de récupérer le jeu
       setTimeout(() => {
-        console.log('Tentative de récupération...');
         requestAnimationFrame(this.animate.bind(this));
       }, 1000);
     }
@@ -943,7 +939,6 @@ export default class GameEngine3D {
       // Gérer l'animation d'introduction
       if (this.isIntroPlaying) {
         // Exécuter l'animation d'intro explicitement
-        console.log("Animation d'introduction en cours...");
         this.updateIntroAnimation();
         return; // Ne pas mettre à jour le reste du jeu pendant l'intro
       }
@@ -974,7 +969,6 @@ export default class GameEngine3D {
         const currentTime = performance.now();
         this.fpsCounter++;
         if (currentTime - this.lastFpsUpdate > 1000) { // Mettre à jour toutes les secondes
-          // DEBUG: console.log('FPS:', this.fpsCounter);
           this.fpsCounter = 0;
           this.lastFpsUpdate = currentTime;
         }
@@ -1017,10 +1011,8 @@ export default class GameEngine3D {
       // Augmenter progressivement la difficulté
       this.difficulty += deltaTime * 0.05;
     } catch (error) {
-      console.error('Erreur dans les mises à jour de jeu:', error);
     }
     } catch (error) {
-      console.error('Erreur critique dans update:', error);
     }
     
     // Spawn de nouveaux objets avec un contrôle amélioré
@@ -1038,7 +1030,6 @@ export default class GameEngine3D {
             this.spawnPlanet();
           }
         } catch (error) {
-          console.error('Erreur lors du spawn de planète:', error);
         }
       }
       // Ajuster le temps de spawn en fonction de la difficulté
@@ -1074,7 +1065,6 @@ export default class GameEngine3D {
         try {
           planet.update(deltaTime);
         } catch (error) {
-          console.error('Erreur lors de la mise à jour d\'une planète:', error);
           // Supprimer la planète en cas d'erreur pour éviter des problèmes futurs
           this.planets.splice(i, 1);
           continue;
@@ -1087,7 +1077,6 @@ export default class GameEngine3D {
         }
       }
     } catch (error) {
-      console.error('Erreur générale dans updatePlanets:', error);
     }
   }
   
@@ -1169,7 +1158,6 @@ export default class GameEngine3D {
         }
       }
     } catch (error) {
-      console.error('Erreur lors de l\'initialisation du spawn de planète:', error);
       return; // Sortir pour éviter d'autres erreurs
     }
     
@@ -1439,7 +1427,6 @@ export default class GameEngine3D {
         // Ajouter des points pour avoir esquivé la planète
         this.score += 10;
         this.onScoreUpdate(this.score)
-        console.log('Points gagnés pour esquiver une planète!');
         planet.setActive(false); // Désactiver la planète après l'esquive
       }
     }

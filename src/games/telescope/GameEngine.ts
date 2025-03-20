@@ -3,7 +3,7 @@ import * as THREE from 'three';
 /**
  * Représente une planète dans le jeu
  */
-interface Planet {
+class Planet {
   id: number;
   name: string;
   color: string;
@@ -15,20 +15,22 @@ interface Planet {
   y: number;
   rotation?: number;
   rotationSpeed?: number;
+
+  constructor(id: number, name: string, color: string, gradient: string, hasRing: boolean, size: number, x: number, y: number, rotation?: number, rotationSpeed?: number, ringColor?: string) {
+    this.id = id;
+    this.name = name;
+    this.color = color;
+    this.gradient = gradient;
+    this.hasRing = hasRing;
+    this.size = size;
+    this.x = x;
+    this.y = y;
+    this.rotation = rotation;
+    this.rotationSpeed = rotationSpeed;
+    this.ringColor = ringColor;
+  }
 }
 
-/**
- * Représente un bonus dans le jeu
- */
-interface Bonus {
-  id: number;
-  name: string;
-  color: string;
-  size: number;
-  x: number;
-  y: number;
-  z: number;
-}
 
 /**
  * Moteur de jeu pour le jeu Telescope
@@ -37,10 +39,10 @@ export default class GameEngine {
   private gameArea: HTMLElement;
   private gameAreaBounds: DOMRect;
   private planets: Planet[] = [];
-  private bonuses: Bonus[] = [];
   private isRunning: boolean = false;
   private animationFrameId: number = 0;
   private lastTime: number = 0;
+  private scene: THREE.Scene; // Ajout de la scène
   
   // Callbacks
   private onPlanetsUpdate: (planets: Planet[]) => void;
@@ -88,16 +90,19 @@ export default class GameEngine {
    * @param gameArea Élément HTML contenant le jeu
    * @param onPlanetsUpdate Callback appelé quand les planètes sont mises à jour
    * @param onTelescopeUpdate Callback appelé quand la position du télescope est mise à jour
+   * @param scene Scène du jeu
    */
   constructor(
     gameArea: HTMLElement,
     onPlanetsUpdate: (planets: Planet[]) => void,
-    onTelescopeUpdate: () => void
+    onTelescopeUpdate: () => void,
+    scene: THREE.Scene
   ) {
     this.gameArea = gameArea;
     this.gameAreaBounds = gameArea.getBoundingClientRect();
     this.onPlanetsUpdate = onPlanetsUpdate;
     this.onTelescopeUpdate = onTelescopeUpdate;
+    this.scene = scene; // Initialisation de la scène
   }
   
   /**
@@ -108,8 +113,7 @@ export default class GameEngine {
     
     this.isRunning = true;
     this.gameAreaBounds = this.gameArea.getBoundingClientRect();
-    this.createPlanets();
-    this.spawnRandomBonus(); // Spawn a bonus at the start
+    this.createAndPositionPlanets(); // Création et positionnement des planètes
     this.lastTime = performance.now();
     this.animate();
   }
@@ -125,6 +129,27 @@ export default class GameEngine {
   }
   
   /**
+   * Met le jeu en pause
+   */
+  pause(): void {
+    this.isRunning = false;
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+  }
+  
+  /**
+   * Reprend le jeu après une pause
+   */
+  resume(): void {
+    if (this.isRunning) return;
+    
+    this.isRunning = true;
+    this.lastTime = performance.now();
+    this.animate();
+  }
+  
+  /**
    * Boucle d'animation principale
    */
   private animate(): void {
@@ -136,7 +161,6 @@ export default class GameEngine {
     
     // Mettre à jour les planètes
     this.updatePlanets(deltaTime);
-    this.updateBonuses(deltaTime); // Ajout de la mise à jour des bonus
 
     // Appeler les callbacks
     this.onPlanetsUpdate(this.planets);
@@ -147,84 +171,34 @@ export default class GameEngine {
   }
   
   /**
-   * Crée les planètes pour le jeu
+   * Crée et positionne les planètes dans la scène pour chaque télescope
    */
-  private createPlanets(): void {
-    // Vider les planètes existantes
+  private createAndPositionPlanets(): void {
     this.planets = [];
-    
-    // Fonction pour vérifier si deux planètes se chevauchent
-    const planetsOverlap = (planet1: Planet, planet2: Planet): boolean => {
-      const distance = Math.sqrt(
-        Math.pow(planet1.x - planet2.x, 2) + 
-        Math.pow(planet1.y - planet2.y, 2)
-      );
-      return distance < (planet1.size/2 + planet2.size/2 + 20); // Ajouter 20px de marge
-    };
-    
-    // Fonction pour vérifier si une position est valide pour une nouvelle planète
-    const isValidPosition = (newPlanet: Planet): boolean => {
-      for (let i = 0; i < this.planets.length; i++) {
-        if (planetsOverlap(newPlanet, this.planets[i])) {
-          return false;
-        }
-      }
-      return true;
-    };
     
     // Créer une planète pour chaque couleur
     for (let i = 0; i < this.planetColors.length; i++) {
-      const planetSize = 40 + Math.random() * 40; // Planètes plus grandes
-      let planet: Planet;
-      let attempts = 0;
-      const maxAttempts = 50;
+      const planetSize = 60 + Math.random() * 60; // Planètes plus grandes et plus visibles
       
-      // Essayer de trouver une position valide
-      do {
-        planet = {
-          id: i,
-          name: this.planetColors[i].name,
-          color: this.planetColors[i].color,
-          gradient: this.planetColors[i].gradient,
-          hasRing: this.planetColors[i].hasRing,
-          ringColor: this.planetColors[i].ringColor,
-          size: planetSize,
-          x: Math.random() * (this.gameAreaBounds.width - planetSize * 2) + planetSize,
-          y: Math.random() * (this.gameAreaBounds.height - planetSize * 2) + planetSize,
-          rotation: Math.random() * Math.PI * 2,
-          rotationSpeed: (Math.random() * 0.5 + 0.1) * (Math.random() < 0.5 ? 1 : -1)
-        };
-        attempts++;
-      } while (!isValidPosition(planet) && attempts < maxAttempts);
-      
-      // Si on a atteint le nombre maximal de tentatives, ajuster la taille
-      if (attempts >= maxAttempts) {
-        planet.size = Math.max(20, planet.size * 0.8);
-      }
+      const planet = {
+        id: i,
+        name: this.planetColors[i].name,
+        color: this.planetColors[i].color,
+        gradient: this.planetColors[i].gradient,
+        hasRing: this.planetColors[i].hasRing,
+        ringColor: this.planetColors[i].ringColor,
+        size: planetSize,
+        x: Math.random() * (this.gameAreaBounds.width - planetSize),
+        y: Math.random() * (this.gameAreaBounds.height - planetSize),
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() * 0.5 + 0.1) * (Math.random() < 0.5 ? 1 : -1)
+      };
       
       this.planets.push(planet);
     }
   }
   
   /**
-   * Fait spawn un bonus aléatoire
-   */
-  private spawnRandomBonus(): void {
-    const bonusSize = 20 + Math.random() * 20; // Taille aléatoire du bonus
-    const bonus: Bonus = {
-      id: this.bonuses.length,
-      name: 'Bonus',
-      color: '#FFD700', // Couleur dorée
-      size: bonusSize,
-      x: Math.random() * (this.gameAreaBounds.width - bonusSize * 2) + bonusSize,
-      y: Math.random() * (this.gameAreaBounds.height - bonusSize * 2) + bonusSize,
-      z: 0 // Position Z pour que le bonus soit visible dès le départ
-    };
-    this.bonuses.push(bonus);
-  }
-  
-  /**
-   * Met à jour l'état des planètes
    * @param deltaTime Temps écoulé depuis la dernière mise à jour (en secondes)
    */
   private updatePlanets(deltaTime: number): void {
@@ -239,24 +213,6 @@ export default class GameEngine {
         } else if (planet.rotation < 0) {
           planet.rotation += Math.PI * 2;
         }
-      }
-    }
-  }
-  
-  /**
-   * Met à jour l'état des bonus
-   * @param deltaTime Temps écoulé depuis la dernière mise à jour (en secondes)
-   */
-  private updateBonuses(deltaTime: number): void {
-    console.log('Updating bonuses...'); // Log to check if the method is called
-    for (const bonus of this.bonuses) {
-      // Move bonuses towards the player along the Z-axis
-      bonus.z += 6 * deltaTime; // Assuming a speed of 6, similar to planets
-      console.log(`Bonus ID: ${bonus.id}, Position Z: ${bonus.z}`); // Log the position of each bonus
-
-      // Check if the bonus is out of bounds and remove it if necessary
-      if (bonus.z > this.gameAreaBounds.height) {
-        this.bonuses = this.bonuses.filter(b => b !== bonus);
       }
     }
   }

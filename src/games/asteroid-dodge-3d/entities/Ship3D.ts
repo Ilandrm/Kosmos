@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import GameObject3D from './GameObject3D';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export default class Ship3D extends GameObject3D {
   public isInvulnerable: boolean = false;
@@ -31,8 +31,8 @@ export default class Ship3D extends GameObject3D {
   private bounds = {
     minX: -20,
     maxX: 20,
-    minY: -15,  // Limite inférieure pour le mouvement vertical
-    maxY: 50,   // Limite supérieure fortement augmentée pour permettre d'aller jusqu'en haut de l'écran
+    minY: -10,  // Limite inférieure pour le mouvement vertical
+    maxY: 10,   // Limite supérieure pour permettre un mouvement jusqu'au bord de l'écran
     minZ: -200, // Limite arrière pour le mouvement en Z (loin en profondeur)
     maxZ: 30    // Limite avant pour le mouvement en Z (près du joueur)
   };
@@ -95,7 +95,7 @@ export default class Ship3D extends GameObject3D {
       '/textures/Créer_un_vaisseau_sp_0305092734_texture.glb',
       
       // Callback appelé lorsque le modèle est chargé
-      (gltf) => {
+      (gltf: THREE.GLTF) => {
         // Déterminer l'échelle et l'orientation appropriées pour le modèle
         const model = gltf.scene;
         
@@ -111,7 +111,7 @@ export default class Ship3D extends GameObject3D {
         model.position.z = 0;
         
         // Optimiser le modèle pour de meilleures performances
-        model.traverse((child) => {
+        model.traverse((child: THREE.Object3D) => {
           if (child instanceof THREE.Mesh) {
             // Désactiver les ombres pour améliorer les performances
             child.castShadow = false;
@@ -162,13 +162,11 @@ export default class Ship3D extends GameObject3D {
       },
       
       // Callback de progression (optionnel)
-      (xhr) => {
-        console.log(`${(xhr.loaded / xhr.total * 100)}% chargé`);
+      (xhr: ProgressEvent) => {
       },
       
       // Callback d'erreur
-      (error) => {
-        console.error('Erreur lors du chargement du modèle:', error);
+      (error: Error) => {
         
         // Créer un vaisseau de secours simple en cas d'échec de chargement
         this.createFallbackShip();
@@ -465,7 +463,6 @@ export default class Ship3D extends GameObject3D {
     // On ajoute des écouteurs d'événements seulement sur la fenêtre pour éviter les duplications
     window.addEventListener('keydown', this.handleKeyDown.bind(this));
     window.addEventListener('keyup', this.handleKeyUp.bind(this));
-    console.log('Écouteurs d\'événements configurés pour le vaisseau');
   }
 
   handleKeyDown(event: KeyboardEvent): void {
@@ -576,7 +573,6 @@ export default class Ship3D extends GameObject3D {
       // Mettre à jour l'inclinaison du vaisseau en fonction de sa position
       this.updateTilt();
     } catch (error) {
-      console.error('Erreur lors du déplacement du vaisseau:', error);
     }
   }
   
@@ -673,3 +669,4 @@ export default class Ship3D extends GameObject3D {
     return distanceSquared < (distance * distance);
   }
 }
+

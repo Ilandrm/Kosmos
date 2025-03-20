@@ -325,7 +325,6 @@ export default class Planet3D extends GameObject3D {
         this.setActive(false);
       }
     } catch (error) {
-      console.error('Erreur dans update de Planet3D:', error);
     }
   }
   

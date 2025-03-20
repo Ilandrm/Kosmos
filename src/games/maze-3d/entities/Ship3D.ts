@@ -35,6 +35,7 @@ export default class Ship3D extends GameObject3D {
   private collisionObjects: THREE.Object3D[] = [];
   
   private camera: THREE.Camera;
+private rotation: THREE.Vector3; // Add rotation property
 
   constructor(scene: THREE.Scene, collisionObjects: THREE.Object3D[] = [], camera: THREE.Camera) {
     const shipGroup = new THREE.Group();
@@ -50,7 +51,6 @@ export default class Ship3D extends GameObject3D {
       moveUp: false,
       moveDown: false
     };
-    console.log('Initialisation du vaisseau : création du vaisseau de secours');
     this.createFallbackShip();
     this.modelLoaded = true;
     this.loadShipModel();
@@ -62,9 +62,7 @@ export default class Ship3D extends GameObject3D {
     
     this.camera = camera;
     
-    console.log('Initialisation du vaisseau : configuration des écouteurs d\'événements');
     this.setupEventListeners();
-    console.log('Initialisation du vaisseau : écouteurs d\'événements configurés');
   }
   
   /**
@@ -109,7 +107,6 @@ export default class Ship3D extends GameObject3D {
         });
         this.mesh.clear();
         this.mesh.add(model);
-        console.log('Modèle du vaisseau chargé avec succès');
 
         // Recalculer la boîte de collision après le modèle est chargé
         this.boundingBox = new THREE.Box3().setFromObject(this.mesh);
@@ -139,10 +136,8 @@ export default class Ship3D extends GameObject3D {
         this.boundingRadius = maxDimension / 2;
       },
       (xhr) => {
-        console.log(`${(xhr.loaded / xhr.total * 100)}% chargé`);
       },
       (error) => {
-        console.error('Erreur lors du chargement du modèle:', error);
         this.createFallbackShip();
         this.modelLoaded = true;
       }
@@ -197,7 +192,6 @@ export default class Ship3D extends GameObject3D {
     this.mesh.add(leftWing);
     this.mesh.add(rightWing);
     
-    console.log("Vaisseau de secours créé");
   }
   
   /**
@@ -222,7 +216,6 @@ export default class Ship3D extends GameObject3D {
     }
 
     // Debugging: Log the initialized ray directions
-    console.log('Initialized ray directions:', this.rayDirections);
   }
   
   /**
@@ -483,9 +476,23 @@ export default class Ship3D extends GameObject3D {
   }
   
   private setupEventListeners(): void {
-    // On ajoute des écouteurs d'événements seulement sur la fenêtre pour éviter les duplications
-    window.addEventListener('keydown', this.handleKeyDown.bind(this));
-    window.addEventListener('keyup', this.handleKeyUp.bind(this));
-    console.log('Écouteurs d\'événements configurés pour le vaisseau');
+    // Nous n'ajoutons plus d'écouteurs d'événements de clavier ici
+    // car nous utilisons maintenant les contrôles à l'écran
+  }
+
+  moveForward() {
+    this.position.z -= this.movementSpeed; // Move forward in the negative Z direction
+  }
+
+  moveBackward() {
+    this.position.z += this.movementSpeed; // Move backward in the positive Z direction
+  }
+
+  rotateLeft() {
+    this.rotation.y += this.movementSpeed * 0.01; // Rotate left
+  }
+
+  rotateRight() {
+    this.rotation.y -= this.movementSpeed * 0.01; // Rotate right
   }
 }

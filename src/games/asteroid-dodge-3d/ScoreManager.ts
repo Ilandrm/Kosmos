@@ -89,9 +89,7 @@ export default class ScoreManager {
   addHighScore(name: string): void {
     const score = this.getCurrentScore();
     if (this.saveScore(name, score)) {
-      console.log(`Score de ${name} sauvegardé avec succès : ${score}`);
     } else {
-      console.log(`Le score de ${name} n'est pas un high score.`);
     }
   }
 }
