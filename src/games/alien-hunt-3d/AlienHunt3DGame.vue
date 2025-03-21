@@ -22,7 +22,7 @@
       </div>
       
       <div v-if="gameState === 'game-over'" class="game-over">
-        <h1>GAME OVER</h1>
+        <h1>Mission Accomplie!</h1>
         <p>Temps: {{ formattedTime }}</p>
         <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
@@ -1244,7 +1244,7 @@ function updateAimRotationTouch(cannonIndex: number, touch: Touch) {
         } else {
           endGame(true);
         }
-      }, 60000);
+      }, 30000);
       
       onBeforeUnmount(() => {
         clearTimeout(gameTimerId);

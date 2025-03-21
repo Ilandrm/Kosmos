@@ -46,7 +46,10 @@ export default class GameEngine3D {
   // Variables d'optimisation des performances
   private _animationCounter: number = 0;
   private _lowResMode: boolean = false;
-  
+  // Ajout des propriétés pour l'animation de fin
+private isEndAnimationPlaying: boolean = false;
+private endAnimationStartTime: number = 0;
+private endGameObject: THREE.Object3D | null = null;
   // Callbacks
   private onScoreUpdate: (score: number) => void;
   private scoreManager: any; // Référence au ScoreManager
@@ -171,7 +174,115 @@ export default class GameEngine3D {
     // 2. Créer les étoiles d'hypervitesse (l'effet principal)
     this.createHyperspaceEffect();
   }
+  // Méthode pour créer l'objet de fin (un K simplifié géométriquement)
+private createEndGameObject(): void {
+  // Groupe pour contenir notre "K" fait de cubes simples
+  this.endGameObject = new THREE.Group();
   
+  // Matériau lumineux pour le K
+  const material = new THREE.MeshPhongMaterial({ 
+    color: 0x8844ff, 
+    emissive: 0x4400aa,
+    shininess: 100,
+    specular: 0xffffff
+  });
+  
+  // Fonction helper pour créer un cube
+  const createCube = (x: number, y: number, z: number, sx: number, sy: number, sz: number) => {
+    const geometry = new THREE.BoxGeometry(sx, sy, sz);
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.set(x, y, z);
+    return cube;
+  };
+  
+  // Créer la colonne verticale du K
+  const mainPillar = createCube(0, 0, 0, 2, 10, 2);
+  this.endGameObject.add(mainPillar);
+  
+  // Créer la branche supérieure du K
+  const upperBranch = createCube(3, 3, 0, 6, 2, 2);
+  upperBranch.rotation.z = -Math.PI / 4;
+  this.endGameObject.add(upperBranch);
+  
+  // Créer la branche inférieure du K
+  const lowerBranch = createCube(3, -3, 0, 6, 2, 2);
+  lowerBranch.rotation.z = Math.PI / 4;
+  this.endGameObject.add(lowerBranch);
+  
+  // Ajouter un effet lumineux
+  const light = new THREE.PointLight(0x8844ff, 1, 50);
+  light.position.set(0, 0, 5);
+  this.endGameObject.add(light);
+  
+  // Position et échelle initiales
+  this.endGameObject.position.set(0, 0, -100);
+  this.endGameObject.scale.set(5, 5, 5);
+  
+  // Ajouter à la scène
+  this.scene.add(this.endGameObject);
+}
+// Méthode pour démarrer l'animation de fin
+public startEndAnimation(): void {
+  console.log("Démarrage de l'animation de fin");
+  if (!this.ship) return;
+  
+  // Créer l'objet K s'il n'existe pas
+  if (!this.endGameObject) {
+    this.createEndGameObject();
+  }
+  
+  this.isEndAnimationPlaying = true;
+  this.endAnimationStartTime = performance.now();
+}
+// Méthode pour animer la fin
+private animateEndSequence(deltaTime: number): void {
+  if (!this.isEndAnimationPlaying || !this.ship || !this.endGameObject) return;
+  
+  // L'objet K se rapproche du joueur
+  this.endGameObject.position.z += deltaTime * 20;
+  this.endGameObject.rotation.y += deltaTime * 0.5;
+  
+  // Le vaisseau regarde vers l'objet K
+  this.ship.lookAt(this.endGameObject.position);
+  
+  // Calculer la distance
+  const distanceToK = this.ship.position.distanceTo(this.endGameObject.position);
+  
+  if (distanceToK > 5) {
+    // Le vaisseau se déplace vers l'objet K
+    const direction = new THREE.Vector3();
+    direction.subVectors(this.endGameObject.position, this.ship.position).normalize();
+    this.ship.position.add(direction.multiplyScalar(deltaTime * 15));
+    
+    // Animation de rotation légère
+    const elapsed = (performance.now() - this.endAnimationStartTime) / 1000;
+    this.ship.rotation.z = Math.sin(elapsed * 2) * 0.2;
+  } else {
+    // Le vaisseau rétrécit
+    this.ship.scale.multiplyScalar(0.95);
+    
+    // Quand le vaisseau est assez petit, fin du jeu
+    if (this.ship.scale.x < 0.1) {
+      // Intensifier la couleur de l'objet K
+      if (this.endGameObject) {
+        this.endGameObject.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const material = child.material as THREE.MeshPhongMaterial;
+            if (material && material.emissive) {
+              material.emissive.setHex(0x7700ff);
+              material.emissiveIntensity = 2;
+            }
+          }
+        });
+      }
+      
+      // Appeler la callback de fin de jeu après un délai
+      setTimeout(() => {
+        this.onGameOver(this.score);
+      }, 2000);
+    }
+  }
+}
   /**
    * Crée l'effet d'hypervitesse/hyperespace avec uniquement des lignes lumineuses
    * moins intenses pour ne pas distraire du jeu principal
@@ -942,7 +1053,17 @@ export default class GameEngine3D {
         this.updateIntroAnimation();
         return; // Ne pas mettre à jour le reste du jeu pendant l'intro
       }
+      if (this.gameTime <= 0 && !this.isEndAnimationPlaying) {
+        this.startEndAnimation();
+        this.gameTime = 0;
+        return;
+      }
       
+      // Animer la séquence de fin si elle est active
+      if (this.isEndAnimationPlaying) {
+        this.animateEndSequence(deltaTime);
+        return; // Sortir tôt pour éviter de mettre à jour d'autres éléments du jeu
+      }
       // Sécurité supplémentaire pour éviter les problèmes de timing
       const timeSinceStart = performance.now() - this.introStartTime;
       if (timeSinceStart < 2000) {
@@ -1018,7 +1139,7 @@ export default class GameEngine3D {
     // Spawn de nouveaux objets avec un contrôle amélioré
     this.spawnTimer -= deltaTime;
     if (this.spawnTimer <= 0) {
-      // Limiter strictement le nombre de planètes pour éviter les surcharges
+      // Limiter strictement le nombre de planètes pour éviter la surcharge
       const maxPlanets = this.MAX_PLANETS + Math.min(3, Math.floor(this.difficulty / 2)); // Augmentation beaucoup plus lente
       // Sécurité: ajouter un délai après le démarrage pour éviter le plantage à 1 seconde
       if (this.lastTime > 1500 && this.planets.length < maxPlanets) {
@@ -1490,7 +1611,30 @@ export default class GameEngine3D {
     if (this.ship) {
       this.ship.dispose();
     }
-    
+    if (this.endGameObject) {
+      this.scene.remove(this.endGameObject);
+      this.endGameObject.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
+    }
     // Nettoyer les autres ressources...
+  }
+
+  // Méthode pour augmenter la taille du collider des bonus
+  private increaseBonusCollider(bonus: Bonus3D, scaleFactor: number): void {
+    const box = new THREE.Box3().setFromObject(bonus.mesh); // Assurez-vous que 'mesh' est l'objet 3D du bonus
+    bonus.collider.min.set(
+      box.min.x - scaleFactor,
+      box.min.y - scaleFactor,
+      box.min.z - scaleFactor
+    );
+    bonus.collider.max.set(
+      box.max.x + scaleFactor,
+      box.max.y + scaleFactor,
+      box.max.z + scaleFactor
+    );
   }
 }
