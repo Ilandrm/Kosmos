@@ -39,7 +39,6 @@
       <div v-else class="victory-message">
         <h2>Félicitations !</h2>
         <p>Vous avez terminé le quiz avec succès !</p>
-        <button class="quiz-option" @click="restartGame">Recommencer</button>
         <button class="quiz-option continue-btn" @click="continueToNextGame">Continuer</button>
       </div>
     </div>

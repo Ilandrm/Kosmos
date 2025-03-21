@@ -3,9 +3,6 @@
     <div 
       ref="gameContainer" 
       class="game-canvas-container"
-      @touchstart="handleTouchStart"
-      @touchmove="handleTouchMove"
-      @touchend="handleTouchEnd"
     ></div>
     <!-- reste du template inchangé -->
     <GameInstruction
@@ -47,8 +44,7 @@
           transform: `rotate(${cannon.rotation}deg)`
         }"
         @mousedown="selectCannon(index, $event)"
-        @touchstart.prevent="selectCannonTouch(index, $event)"
-      >
+        @touchstart.prevent="selectCannonTouch(index, $event)"              >
         <div class="cannon-base"></div>
         <div class="cannon-barrel"></div>
         <div v-if="!cannon.canShoot" class="reload-indicator"></div>
@@ -103,6 +99,11 @@ export default defineComponent({
   },
   setup() {
     const router = useRouter();
+    // En haut de votre setup()
+    const activeTouches = ref<{[identifier: number]: {
+  cannonIndex: number,
+  touchId: number
+}}>({});
     // État du jeu
     const gameState = ref('menu'); // 'menu', 'playing', 'victory', 'game-over'
     const gameTime = ref(0);
@@ -248,49 +249,38 @@ export default defineComponent({
       
       window.addEventListener('mouseleave', handleMouseLeave);
     }
-    
-    // Fonction pour sélectionner un canon via tactile
     function selectCannonTouch(index: number, event: TouchEvent) {
-      event.preventDefault(); // Empêcher le défilement par défaut
-      
-      // Vérifier si le canon peut tirer
-      if (!cannons.value[index].canShoot) {
-        return;
-      }
-      
-      selectedCannon.value = index;
-      cannons.value[index].isAiming = true;
-      
-      // Obtenez les coordonnées du premier toucher
-      const touch = event.touches[0];
-      
-      // Créer un tracer immédiatement pour le feedback visuel
-      if (scene && cannonsObjects[index]) {
-        const angle = cannons.value[index].rotation;
-        createTracer(index, angle);
-      }
-      
-      // Initialiser la position de visée
-      updateAimRotationTouch(index, touch);
-      
-      // Ajouter les écouteurs d'événements pour le mouvement et le relâchement
-      const handleMove = (e: TouchEvent) => handleAimingTouch(index, e);
-      const handleRelease = (e: TouchEvent) => {
-        // Tirer dans la direction où l'utilisateur relâche
-        handleShoot(index);
-        window.removeEventListener('touchmove', handleMove);
-        window.removeEventListener('touchend', handleRelease);
-        window.removeEventListener('touchcancel', handleRelease);
-        
-        // Arrêter le suivi tactile pour ce canon
-        stopMouseTracking(index);
-      };
-      
-      window.addEventListener('touchmove', handleMove, { passive: false });
-      window.addEventListener('touchend', handleRelease);
-      window.addEventListener('touchcancel', handleRelease);
-    }
-    
+  event.preventDefault();
+  
+  // Check if cannon can shoot
+  if (!cannons.value[index].canShoot) return;
+  
+  // Get the touch that triggered this event
+  if (event.touches.length === 0) return;
+  
+  // Find the touch that triggered this event
+  const touch = event.changedTouches[0];
+  const touchId = touch.identifier;
+  
+  // Store this touch as controlling this cannon
+  activeTouches.value[touchId] = {
+    cannonIndex: index,
+    touchId: touchId
+  };
+  
+  // Update cannon state
+  cannons.value[index].isAiming = true;
+  
+  // Set initial aim position
+  cannons.value[index].aimPosition = {
+    x: touch.clientX,
+    y: touch.clientY
+  };
+  
+  // Initial tracer
+  createTracer(index, cannons.value[index].rotation);
+}
+
     function onInstructionComplete() {
       showInstructions.value = false;
       startGame();
@@ -1181,7 +1171,30 @@ export default defineComponent({
         }
       }, alienSpawnTime);
     }
-    
+    // Ajoutez cette fonction près de votre fonction selectCannonTouch
+function updateAimRotationTouch(cannonIndex: number, touch: Touch) {
+  // Stockage de la position exacte du toucher pour le viseur
+  cannons.value[cannonIndex].aimPosition = {
+    x: touch.clientX,
+    y: touch.clientY
+  };
+  
+  // Position fixe des canons en bas de l'écran
+  const cannonPos = {
+    x: window.innerWidth * ((cannonIndex + 1) * 0.2),
+    y: window.innerHeight - 50
+  };
+  
+  // Calculer l'angle
+  const dx = touch.clientX - cannonPos.x;
+  const dy = cannonPos.y - touch.clientY;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+  const clampedAngle = Math.min(Math.max(angle, 0), 180);
+  
+  // Mettre à jour la rotation du canon
+  cannons.value[cannonIndex].rotation = clampedAngle - 90;
+  cannons.value[cannonIndex].aimRotation = clampedAngle;
+}
     function scheduleFriendlySpawning() {
       // Créer un vaisseau ami tout de suite
       createFriendlyShip();
@@ -1688,7 +1701,102 @@ export default defineComponent({
     // Cycle de vie du composant
     onMounted(() => {
       // Ne rien initialiser ici, tout sera fait au démarrage du jeu
-    });
+       // Global touch move handler
+  window.addEventListener('touchmove', (e: TouchEvent) => {
+    e.preventDefault();
+    
+    // Process all active touches
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      const touchId = touch.identifier;
+      
+      // If this touch is controlling a cannon
+      if (activeTouches.value[touchId]) {
+        const cannonIndex = activeTouches.value[touchId].cannonIndex;
+        
+        // Update aim position
+        cannons.value[cannonIndex].aimPosition = {
+          x: touch.clientX,
+          y: touch.clientY
+        };
+        
+        // Calculate new rotation angle
+        const cannonPos = {
+          x: window.innerWidth * (cannonIndex * 0.2 + 0.2),
+          y: window.innerHeight - 50
+        };
+        
+        const dx = touch.clientX - cannonPos.x;
+        const dy = cannonPos.y - touch.clientY;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const clampedAngle = Math.min(Math.max(angle, 0), 180);
+        
+        // Update cannon rotation
+        cannons.value[cannonIndex].rotation = clampedAngle - 90;
+        cannons.value[cannonIndex].aimRotation = angle;
+        
+        // Update 3D model if available
+        if (cannonIndex < cannonsObjects.length && cannonsObjects[cannonIndex]) {
+          const cannon = cannonsObjects[cannonIndex];
+          if (cannon && cannon.children && cannon.children.length > 1) {
+            const rotationRadians = (clampedAngle - 90) * (Math.PI / 180);
+            cannon.children[1].rotation.z = rotationRadians;
+          }
+        }
+        
+        // Update tracer (remove old ones first)
+        for (let j = tracers.length - 1; j >= 0; j--) {
+          const tracer = tracers[j];
+          const data = objectData.get(tracer) as TracerData;
+          if (data && data.player === cannonIndex) {
+            scene.remove(tracer);
+            tracers.splice(j, 1);
+          }
+        }
+        
+        // Create new tracer
+        createTracer(cannonIndex, angle);
+      }
+    }
+  }, { passive: false });
+  
+  // Global touch end handler
+  window.addEventListener('touchend', (e: TouchEvent) => {
+    // Process all ended touches
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const touchId = touch.identifier;
+      
+      // If this touch was controlling a cannon
+      if (activeTouches.value[touchId]) {
+        const cannonIndex = activeTouches.value[touchId].cannonIndex;
+        
+        // Fire the cannon
+        handleShoot(cannonIndex);
+        
+        // Reset cannon state
+        cannons.value[cannonIndex].isAiming = false;
+        
+        // Remove this touch from tracking
+        delete activeTouches.value[touchId];
+      }
+    }
+  });
+  
+  // Handle touch cancel similarly
+  window.addEventListener('touchcancel', (e: TouchEvent) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const touchId = touch.identifier;
+      
+      if (activeTouches.value[touchId]) {
+        const cannonIndex = activeTouches.value[touchId].cannonIndex;
+        cannons.value[cannonIndex].isAiming = false;
+        delete activeTouches.value[touchId];
+      }
+    }
+  });
+});
     
     onBeforeUnmount(() => {
       // Nettoyage
@@ -1720,135 +1828,24 @@ export default defineComponent({
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('touchmove', null);
+  window.removeEventListener('touchend', null);
+  window.removeEventListener('touchcancel', null);
+
     });
     
-   
-    
-    const touchStartX = ref(0);
-    const touchStartY = ref(0);
-    const touchCurrentX = ref(0);
-    const touchCurrentY = ref(0);
-    const touchSelectedCannon = ref(-1);
-    const isTouching = ref(false);
 
-    // Fonctions de gestion des événements tactiles
-    // Mettre à jour les gestionnaires d'événements tactiles avec une implémentation simplifiée
-const handleTouchStart = (event: TouchEvent) => {
-  event.preventDefault();
-  const touch = event.touches[0];
-  const rect = gameContainer.value.getBoundingClientRect();
-  
-  // Calculer la position de toucher normalisée pour le raycaster
-  mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
-  
-  // Utiliser la même logique que handleMouseDown pour détecter et sélectionner les canons
-  raycaster.setFromCamera(mouse, camera);
-  
-  // Intersect avec les modèles de canons pour voir lequel est touché
-  const intersects = raycaster.intersectObjects(cannonsObjects, true);
-  
-  if (intersects.length > 0) {
-    // Trouver le canon correspondant
-    for (let i = 0; i < cannonsObjects.length; i++) {
-      if (intersects[0].object.parent === cannonsObjects[i] || 
-          intersects[0].object === cannonsObjects[i]) {
-        
-        // Vérifier si le canon peut tirer
-        if (!cannons.value[i].canShoot) return;
-        
-        // Sélectionner le canon et initialiser le viseur
-        selectedCannon.value = i;
-        cannons.value[i].isAiming = true;
-        
-        // Stocker la position du toucher pour le viseur
-        cannons.value[i].aimPosition = {
-          x: touch.clientX,
-          y: touch.clientY
-        };
-        
-        // Calculer l'angle initial pour le canon
-        const cannonPos = {
-          x: window.innerWidth * ((i + 1) * 0.2),
-          y: window.innerHeight - 50
-        };
-        
-        const dx = touch.clientX - cannonPos.x;
-        const dy = cannonPos.y - touch.clientY;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        const clampedAngle = Math.min(Math.max(angle, 0), 180);
-        
-        // Mettre à jour la rotation du canon
-        cannons.value[i].rotation = clampedAngle - 90;
-        cannons.value[i].aimRotation = clampedAngle;
-        
-        // Créer un traceur visuel
-        createTracer(i, clampedAngle);
-        
-        break;
-      }
-    }
-  }
-};
-
-const handleTouchMove = (event: TouchEvent) => {
-  event.preventDefault();
-  if (selectedCannon.value === -1) return;
-  
-  const cannonIndex = selectedCannon.value;
-  const touch = event.touches[0];
-  
-  // Stocker la position du toucher pour le viseur
-  cannons.value[cannonIndex].aimPosition = {
-    x: touch.clientX,
-    y: touch.clientY
-  };
-  
-  // Calculer le nouvel angle pour le canon
-  const cannonPos = {
-    x: window.innerWidth * ((cannonIndex + 1) * 0.2),
-    y: window.innerHeight - 50
-  };
-  
-  const dx = touch.clientX - cannonPos.x;
-  const dy = cannonPos.y - touch.clientY;
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-  const clampedAngle = Math.min(Math.max(angle, 0), 180);
-  
-  // Mettre à jour la rotation du canon
-  cannons.value[cannonIndex].rotation = clampedAngle - 90;
-  cannons.value[cannonIndex].aimRotation = clampedAngle;
-  
-  // Mettre à jour le traceur visuel
-  // Supprimer les anciens traceurs
+// Fonction d'aide pour nettoyer les traceurs d'un joueur
+function cleanPlayerTracers(playerIndex: number) {
   for (let i = tracers.length - 1; i >= 0; i--) {
     const tracer = tracers[i];
-    const data = objectData.get(tracer);
-    if (data && data.player === cannonIndex) {
+    const data = objectData.get(tracer) as TracerData;
+    if (data && data.player === playerIndex) {
       scene.remove(tracer);
       tracers.splice(i, 1);
     }
   }
-  
-  // Créer un nouveau traceur
-  createTracer(cannonIndex, clampedAngle);
-};
-
-const handleTouchEnd = (event: TouchEvent) => {
-  event.preventDefault();
-  if (selectedCannon.value === -1) return;
-  
-  const cannonIndex = selectedCannon.value;
-  
-  // Tirer depuis le canon
-  shootFromCannon(cannonIndex);
-  
-  // Réinitialiser l'état
-  cannons.value[cannonIndex].isAiming = false;
-  selectedCannon.value = -1;
-};
-
-    // Fonction pour obtenir l'index du canon à partir de la position tactile
+}
     function getCannonIndexFromTouch(touch: Touch): number {
       const rect = gameContainer.value.getBoundingClientRect();
       const x = touch.clientX - rect.left;
@@ -1875,7 +1872,11 @@ const handleTouchEnd = (event: TouchEvent) => {
       playerNames,
       showInstructions,
       gameInstructions ,
-      onInstructionComplete
+      onInstructionComplete,
+      selectCannonTouch,
+      handleShoot, // Ajoutez-le s'il n'est pas déjà présent
+      createTracer,
+      activeTouches
     };
   }
 });
@@ -1896,6 +1897,8 @@ const handleTouchEnd = (event: TouchEvent) => {
   left: 0;
   width: 100%;
   height: 100%;
+  touch-action: none; /* Prevent default touch actions */
+  overflow: hidden;
 }
 
 .game-overlay {
