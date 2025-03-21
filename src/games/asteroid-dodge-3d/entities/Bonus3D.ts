@@ -31,7 +31,7 @@ export default class Bonus3D extends GameObject3D {
     [BonusType3D.POINTS]: {
       color: 0xFFD700,       // Or
       emissive: 0xFFA500,    // Orange
-      size: 1.0,
+      size: 3.0,             // Augmenter la taille
       value: 200,
       points: 5,              // Étoile à 5 branches
       innerRadiusRatio: 0.4
@@ -39,7 +39,7 @@ export default class Bonus3D extends GameObject3D {
     [BonusType3D.SHIELD]: {
       color: 0x00BFFF,       // Bleu ciel
       emissive: 0x1E90FF,    // Bleu royal
-      size: 1.2,
+      size: 3.0,
       value: 10,             // Durée du bouclier en secondes
       points: 6,              // Étoile à 6 branches
       innerRadiusRatio: 0.5
@@ -47,7 +47,7 @@ export default class Bonus3D extends GameObject3D {
     [BonusType3D.SLOWTIME]: {
       color: 0x9932CC,       // Violet
       emissive: 0x8A2BE2,    // Bleu violet
-      size: 1.1,
+      size: 3.0,
       value: 5,              // Durée du ralentissement en secondes
       points: 7,              // Étoile à 7 branches
       innerRadiusRatio: 0.45
@@ -55,7 +55,7 @@ export default class Bonus3D extends GameObject3D {
     [BonusType3D.EXTRALIFE]: {
       color: 0xFF3030,       // Rouge vif
       emissive: 0xFF0000,    // Rouge
-      size: 1.3,
+      size: 3.0,
       value: 1,              // Nombre de vies supplémentaires
       points: 8,              // Étoile à 8 branches
       innerRadiusRatio: 0.35

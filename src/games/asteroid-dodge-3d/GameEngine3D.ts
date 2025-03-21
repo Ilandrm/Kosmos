@@ -80,7 +80,7 @@ private endGameObject: THREE.Object3D | null = null;
       timeScale: 1.0
     },
     bonusSpawnTimer: 0,
-    bonusSpawnRate: 2 // Secondes entre les apparitions de bonus
+    bonusSpawnRate: 1 // Augmenter la fréquence de spawn des bonus
   }
   
   constructor(
@@ -778,7 +778,7 @@ private animateEndSequence(deltaTime: number): void {
         timeScale: 1.0
       },
       bonusSpawnTimer: this.bonusEffects.bonusSpawnRate * 0.5, // Premier bonus apparaît plus tôt
-      bonusSpawnRate: 5
+      bonusSpawnRate: 1
     };
     
     // NOTE: Le vaisseau est créé dans la méthode start() pour éviter les doublons

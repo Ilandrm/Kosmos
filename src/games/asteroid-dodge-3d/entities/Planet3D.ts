@@ -36,9 +36,9 @@ export default class Planet3D extends GameObject3D {
     rotationSpeed: number
   }> = {
     [PlanetType.EARTH]: {
-      radius: 3.2,  // Taille augmentée pour être plus visible
+      radius: 4.0,  // Hitbox à 4
       points: 20,
-      color: 0xffffff,  // La couleur sera fournie par la texture
+      color: 0xffffff,
       emissiveColor: 0x1144aa,
       emissiveIntensity: 0.3,
       hasAtmosphere: true,
@@ -47,7 +47,7 @@ export default class Planet3D extends GameObject3D {
       rotationSpeed: 0.2
     },
     [PlanetType.MARS]: {
-      radius: 2.8,  // Taille augmentée pour être plus visible
+      radius: 4.0,  // Hitbox à 4
       points: 15,
       color: 0xffffff,
       emissiveColor: 0x553311,
@@ -58,7 +58,7 @@ export default class Planet3D extends GameObject3D {
       rotationSpeed: 0.18
     },
     [PlanetType.VENUS]: {
-      radius: 1.4,
+      radius: 4.0,  // Hitbox à 4
       points: 25,
       color: 0xffffff,
       emissiveColor: 0x775533,
@@ -69,7 +69,7 @@ export default class Planet3D extends GameObject3D {
       rotationSpeed: 0.1
     },
     [PlanetType.JUPITER]: {
-      radius: 2.5,
+      radius: 4.0,  // Hitbox à 4
       points: 50,
       color: 0xffffff,
       emissiveColor: 0x774411,
@@ -80,7 +80,7 @@ export default class Planet3D extends GameObject3D {
       rotationSpeed: 0.4
     },
     [PlanetType.NEPTUNE]: {
-      radius: 2.0,
+      radius: 4.0,  // Hitbox à 4
       points: 35,
       color: 0xffffff,
       emissiveColor: 0x114477,
