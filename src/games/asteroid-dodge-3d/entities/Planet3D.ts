@@ -119,7 +119,7 @@ export default class Planet3D extends GameObject3D {
   /**
    * Charge les textures nécessaires pour les planètes
    */
-  private static loadTextures(): void {
+  private static async loadTextures(): Promise<void> {
     if (!this.textures.earth) {
       const textureLoader = new TextureLoader();
       

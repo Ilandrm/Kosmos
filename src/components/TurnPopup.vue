@@ -47,6 +47,12 @@ export default defineComponent({
 }
 
 .popup-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
   background-color: white;
   padding: 20px;
   border-radius: 10px;
@@ -65,5 +71,11 @@ button {
 
 button:hover {
   background-color: #ff5e8f;
+}
+
+@media (max-width: 768px) {
+  .popup-content {
+    padding: 10px;
+  }
 }
 </style>

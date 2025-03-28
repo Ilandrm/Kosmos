@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import DecryptionMiniGame from '../games/maze-3d/DecryptionMiniGame.vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -49,6 +50,11 @@ const router = createRouter({
       path: '/completion',
       name: 'completion',
       component: () => import('../views/CompletionView.vue')
+    },
+    {
+      path: '/games/decryption',
+      name: 'DecryptionMiniGame',
+      component: DecryptionMiniGame,
     },
   ]
 })

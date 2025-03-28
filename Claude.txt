@@ -1,5 +1,4 @@
 
--reparer alien tirs tactile
 -augmenter le box collider des bonus dans asteroide dodge 
 -faire une petite cutscene a la fin ou le vaisseau rentre dans un truc koesio
 -reparer collisions maze3D

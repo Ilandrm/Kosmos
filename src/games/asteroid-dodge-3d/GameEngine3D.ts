@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import Ship3D from './entities/Ship3D';
 import Planet3D, { PlanetType } from './entities/Planet3D';
 import Bonus3D, { BonusType3D } from './entities/Bonus3D';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import gsap from 'gsap';
 
+/**
+ * Classe principale du moteur de jeu 3D
+ */
 export default class GameEngine3D {
   // Three.js components
   private scene: THREE.Scene;
@@ -14,9 +19,14 @@ export default class GameEngine3D {
   private hyperspaceStars: THREE.Group | null = null; // Groupe principal pour l'effet d'hypervitesse
   private hyperspaceIncoming: THREE.Group | null = null; // Traînées convergentes
   private hyperspaceOutgoing: THREE.Group | null = null; // Traînées divergentes
-
+  private endGameObject: THREE.Object3D | null = null;
+  private isPlayingEndAnimation: boolean = false;
+  private kModelLoader: GLTFLoader | null = null;
+  private preloadedKModel: THREE.Group | null = null;
+  
   // Game objects
   private ship: Ship3D | null = null;
+  private isGameOver: boolean = false;
 
   // Public getter for ship
   public getShip(): Ship3D | null {
@@ -37,7 +47,8 @@ export default class GameEngine3D {
   private fpsCounter: number = 0;
   private lastFpsUpdate: number = 0;
   private gameContainer: HTMLElement;
-  
+  private endAnimationProgress: number = 0;
+
   // Animation d'introduction
   private isIntroPlaying: boolean = false;
   private introAnimationComplete: boolean = false;
@@ -47,9 +58,8 @@ export default class GameEngine3D {
   private _animationCounter: number = 0;
   private _lowResMode: boolean = false;
   // Ajout des propriétés pour l'animation de fin
-private isEndAnimationPlaying: boolean = false;
+
 private endAnimationStartTime: number = 0;
-private endGameObject: THREE.Object3D | null = null;
   // Callbacks
   private onScoreUpdate: (score: number) => void;
   private scoreManager: any; // Référence au ScoreManager
@@ -97,6 +107,8 @@ private endGameObject: THREE.Object3D | null = null;
     this.onLivesUpdate = onLivesUpdate;
     this.onGameOver = onGameOver;
     this.scoreManager = scoreManager;
+    this.preloadKModel();
+
     
     // Initialiser la scène Three.js
     this.scene = new THREE.Scene();
@@ -156,7 +168,7 @@ private endGameObject: THREE.Object3D | null = null;
       sizeAttenuation: true
     });
     
-    const starsCount = 400; // Réduction du nombre d'étoiles statiques
+    const starsCount = 1000; // Réduction du nombre d'étoiles statiques
     const starsPositions = new Float32Array(starsCount * 3);
     
     for (let i = 0; i < starsCount; i++) {
@@ -174,116 +186,9 @@ private endGameObject: THREE.Object3D | null = null;
     // 2. Créer les étoiles d'hypervitesse (l'effet principal)
     this.createHyperspaceEffect();
   }
-  // Méthode pour créer l'objet de fin (un K simplifié géométriquement)
-private createEndGameObject(): void {
-  // Groupe pour contenir notre "K" fait de cubes simples
-  this.endGameObject = new THREE.Group();
-  
-  // Matériau lumineux pour le K
-  const material = new THREE.MeshPhongMaterial({ 
-    color: 0x8844ff, 
-    emissive: 0x4400aa,
-    shininess: 100,
-    specular: 0xffffff
-  });
-  
-  // Fonction helper pour créer un cube
-  const createCube = (x: number, y: number, z: number, sx: number, sy: number, sz: number) => {
-    const geometry = new THREE.BoxGeometry(sx, sy, sz);
-    const cube = new THREE.Mesh(geometry, material);
-    cube.position.set(x, y, z);
-    return cube;
-  };
-  
-  // Créer la colonne verticale du K
-  const mainPillar = createCube(0, 0, 0, 2, 10, 2);
-  this.endGameObject.add(mainPillar);
-  
-  // Créer la branche supérieure du K
-  const upperBranch = createCube(3, 3, 0, 6, 2, 2);
-  upperBranch.rotation.z = -Math.PI / 4;
-  this.endGameObject.add(upperBranch);
-  
-  // Créer la branche inférieure du K
-  const lowerBranch = createCube(3, -3, 0, 6, 2, 2);
-  lowerBranch.rotation.z = Math.PI / 4;
-  this.endGameObject.add(lowerBranch);
-  
-  // Ajouter un effet lumineux
-  const light = new THREE.PointLight(0x8844ff, 1, 50);
-  light.position.set(0, 0, 5);
-  this.endGameObject.add(light);
-  
-  // Position et échelle initiales
-  this.endGameObject.position.set(0, 0, -100);
-  this.endGameObject.scale.set(5, 5, 5);
-  
-  // Ajouter à la scène
-  this.scene.add(this.endGameObject);
-}
-// Méthode pour démarrer l'animation de fin
-public startEndAnimation(): void {
-  console.log("Démarrage de l'animation de fin");
-  if (!this.ship) return;
-  
-  // Créer l'objet K s'il n'existe pas
-  if (!this.endGameObject) {
-    this.createEndGameObject();
-  }
-  
-  this.isEndAnimationPlaying = true;
-  this.endAnimationStartTime = performance.now();
-}
-// Méthode pour animer la fin
-private animateEndSequence(deltaTime: number): void {
-  if (!this.isEndAnimationPlaying || !this.ship || !this.endGameObject) return;
-  
-  // L'objet K se rapproche du joueur
-  this.endGameObject.position.z += deltaTime * 20;
-  this.endGameObject.rotation.y += deltaTime * 0.5;
-  
-  // Le vaisseau regarde vers l'objet K
-  this.ship.lookAt(this.endGameObject.position);
-  
-  // Calculer la distance
-  const distanceToK = this.ship.position.distanceTo(this.endGameObject.position);
-  
-  if (distanceToK > 5) {
-    // Le vaisseau se déplace vers l'objet K
-    const direction = new THREE.Vector3();
-    direction.subVectors(this.endGameObject.position, this.ship.position).normalize();
-    this.ship.position.add(direction.multiplyScalar(deltaTime * 15));
-    
-    // Animation de rotation légère
-    const elapsed = (performance.now() - this.endAnimationStartTime) / 1000;
-    this.ship.rotation.z = Math.sin(elapsed * 2) * 0.2;
-  } else {
-    // Le vaisseau rétrécit
-    this.ship.scale.multiplyScalar(0.95);
-    
-    // Quand le vaisseau est assez petit, fin du jeu
-    if (this.ship.scale.x < 0.1) {
-      // Intensifier la couleur de l'objet K
-      if (this.endGameObject) {
-        this.endGameObject.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            const material = child.material as THREE.MeshPhongMaterial;
-            if (material && material.emissive) {
-              material.emissive.setHex(0x7700ff);
-              material.emissiveIntensity = 2;
-            }
-          }
-        });
-      }
-      
-      // Appeler la callback de fin de jeu après un délai
-      setTimeout(() => {
-        this.onGameOver(this.score);
-      }, 2000);
-    }
-  }
-}
-  /**
+  // Méthode pour démarrer l'animation de fin
+  // Méthode pour démarrer l'animation de fin
+  /** 
    * Crée l'effet d'hypervitesse/hyperespace avec uniquement des lignes lumineuses
    * moins intenses pour ne pas distraire du jeu principal
    */
@@ -408,57 +313,6 @@ private animateEndSequence(deltaTime: number): void {
       this.scene.add(this.hyperspaceStars);
     }
   }
-  
-  /**
-   * Crée une texture de lueur améliorée pour les points lumineux avec une brillance accrue
-   */
-  private createGlowTexture(): THREE.Texture {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64; // Augmentation de la résolution pour une meilleure qualité
-    canvas.height = 64;
-    
-    const context = canvas.getContext('2d');
-    if (!context) return new THREE.Texture();
-    
-    // Créer un dégradé radial plus intense pour un effet de brillance amélioré
-    const gradient = context.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, 0,
-      canvas.width / 2, canvas.height / 2, canvas.width / 2
-    );
-    
-    // Noyau blanc plus intense
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.1, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.9)');
-    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    
-    // Remplir avec le dégradé principal
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Ajouter un effet de halo supplémentaire pour une brillance accrue
-    context.globalCompositeOperation = 'lighter';
-    
-    const haloGradient = context.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, canvas.width / 12,
-      canvas.width / 2, canvas.height / 2, canvas.width / 2.5
-    );
-    
-    haloGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
-    haloGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
-    haloGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    
-    context.fillStyle = haloGradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    const texture = new THREE.Texture(canvas);
-    texture.needsUpdate = true;
-    
-    return texture;
-  }
-  
-  // Fin des méthodes de création de l'effet hyperespace
   
   /**
    * Anime l'effet d'hypervitesse avec un tunnel spatial dynamique uniquement composé de lignes
@@ -742,9 +596,16 @@ private animateEndSequence(deltaTime: number): void {
    */
   private init(): void {
     // Vider la scène des objets de jeu existants
+    this.isGameOver = false;        // S'assurer que le ScoreManager a la valeur finale correcte
+
     if (this.ship) {
       this.ship.dispose();
       this.ship = null;
+    }
+    if (this.endGameObject) {
+
+      this.scene.remove(this.endGameObject);
+      this.endGameObject = null;
     }
     
     // Nettoyer les planètes
@@ -755,6 +616,7 @@ private animateEndSequence(deltaTime: number): void {
     this.bonuses.forEach(bonus => bonus.dispose());
     this.bonuses = [];
     
+    this.endGameObject = null;
     // Réinitialiser l'état du jeu
     this.score = 0;
     this.lives = 3;
@@ -812,7 +674,7 @@ private animateEndSequence(deltaTime: number): void {
         // Positionner le vaisseau en dehors de l'écran pour l'animation d'entrée
         this.ship.position = new THREE.Vector3(0, -20, 50); // Position encore plus éloignée pour que l'anim soit visible
         // Orienter le vaisseau vers la caméra
-        this.ship.mesh.rotation.x = Math.PI / 3; // Incliner davantage pour mieux voir l'animation
+        (this.ship as Ship3D).setMeshRotationX(Math.PI / 3); // Incliner davantage pour mieux voir l'animation
       } catch (error) {
         // Récupération en créant un vaisseau simple
         const shipGroup = new THREE.Group();
@@ -919,7 +781,7 @@ private animateEndSequence(deltaTime: number): void {
     const endRotationX = 0;
     
     const currentRotationX = startRotationX + (endRotationX - startRotationX) * easeOut;
-    this.ship.mesh.rotation.x = currentRotationX;
+    (this.ship as Ship3D).setMeshRotationX(currentRotationX);
   }
   
   /**
@@ -1043,7 +905,9 @@ private animateEndSequence(deltaTime: number): void {
         // Forçage de l'animation pendant les 5 premières secondes
         this.isIntroPlaying = true;
       }
-
+      if(this.isGameOver){
+        console.log("gameOver")
+      }
       // Animer les étoiles en arrière-plan - Toujours exécuté, même pendant l'intro
       this.animateStars(deltaTime);
       
@@ -1053,17 +917,26 @@ private animateEndSequence(deltaTime: number): void {
         this.updateIntroAnimation();
         return; // Ne pas mettre à jour le reste du jeu pendant l'intro
       }
-      if (this.gameTime <= 0 && !this.isEndAnimationPlaying) {
-        this.startEndAnimation();
+      if (this.gameTime <= 0) {
         this.gameTime = 0;
+        console.log(this.isPlayingEndAnimation)
+        console.log(this.isGameOver)
+        // Appeler gameOver seulement si l'animation n'est pas déjà en cours
+        // ET si le jeu n'est pas déjà terminé
+        if (!this.isPlayingEndAnimation && !this.isGameOver) {
+          this.isGameOver = true; // Ajouter ce flag
+          this.gameOver();
+        }
+      }
+      if (this.isPlayingEndAnimation) {
+        // Utiliser le même système temporel que le reste du jeu
+        const currentTime = performance.now();
+        const elapsedTime = (currentTime - this.endAnimationStartTime) / 1000;
+        this.updateEndAnimation(elapsedTime, deltaTime);
+        this.animateStars(deltaTime);
         return;
       }
       
-      // Animer la séquence de fin si elle est active
-      if (this.isEndAnimationPlaying) {
-        this.animateEndSequence(deltaTime);
-        return; // Sortir tôt pour éviter de mettre à jour d'autres éléments du jeu
-      }
       // Sécurité supplémentaire pour éviter les problèmes de timing
       const timeSinceStart = performance.now() - this.introStartTime;
       if (timeSinceStart < 2000) {
@@ -1094,11 +967,7 @@ private animateEndSequence(deltaTime: number): void {
           this.lastFpsUpdate = currentTime;
         }
       
-      if (this.gameTime <= 0) {
-        this.gameTime = 0;
-        this.gameOver(); // Utiliser la fonction gameOver au lieu de endGame
-        return; // Sortir de la fonction pour éviter tout autre traitement
-      }
+    
       
       // Arrondir pour éviter les problèmes de precision avec les nombres flottants
       const roundedTime = Math.max(Math.ceil(this.gameTime), 1); // Garantir au moins 1 seconde
@@ -1501,7 +1370,7 @@ private animateEndSequence(deltaTime: number): void {
    */
   private handleBonusCollision(bonus: Bonus3D): void {
     const bonusType = bonus.getType();
-    const bonusValue = bonus.getValue();
+    const bonusValue = (bonus as any).getValue();
     
     switch (bonusType) {
       case BonusType3D.POINTS:
@@ -1532,8 +1401,51 @@ private animateEndSequence(deltaTime: number): void {
         this.onLivesUpdate(this.lives);
         break;
     }
+    
+    this.animateBonusCollection(bonus);
   }
   
+  private animateBonusCollection(bonus: Bonus3D): void {
+    // Determine the color based on the bonus type
+    let bonusColor;
+    switch (bonus.type) {
+        case BonusType3D.YELLOW:
+            bonusColor = 0xffff00; // Yellow for shield
+            break;
+        case BonusType3D.GREEN:
+            bonusColor = 0x00ff00; // Green for speed boost
+            break;
+        case BonusType3D.RED:
+            bonusColor = 0xff0000; // Red for extra life
+            break;
+        case BonusType3D.BLUE:
+            bonusColor = 0x0000ff; // Blue for time slow
+            break;
+        case BonusType3D.PURPLE:
+            bonusColor = 0x800080; // Purple for points bonus
+            break;
+        default:
+            bonusColor = 0xffffff; // Default to white if unknown
+    }
+
+    const bonusEffect = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 16, 16),
+        new THREE.MeshBasicMaterial({ color: bonusColor, transparent: true, opacity: 0.8 })
+    );
+    bonusEffect.position.copy(bonus.position);
+    this.scene.add(bonusEffect);
+
+    // Animation
+    gsap.to(bonusEffect.scale, {
+        x: 2,
+        y: 2,
+        z: 2,
+        duration: 0.5,
+        onComplete: () => {
+            this.scene.remove(bonusEffect);
+        }
+    });
+}
   /**
    * Vérifie les collisions entre le vaisseau et les planètes
    */
@@ -1588,20 +1500,27 @@ private animateEndSequence(deltaTime: number): void {
    * Termine le jeu
    */
   private gameOver(): void {
-    this.stop();
+    // Ne pas arrêter le moteur tout de suite
+    // this.stop(); <- Supprimer/commenter cette ligne
     
-    // S'assurer que le ScoreManager a la valeur finale correcte
-    if (this.scoreManager) {
-      this.scoreManager.updateCurrentScore(this.score);
-    }
-    
-    this.onGameOver(this.score);
+    // Lancer l'animation de fin
+    this.startEndAnimation()
+      .then(() => {
+        // Arrêter le moteur APRÈS que l'animation soit terminée
+        this.stop();
+        this.isGameOver = true;        // S'assurer que le ScoreManager a la valeur finale correcte
+        if (this.scoreManager) {
+          this.scoreManager.updateCurrentScore(this.score);
+        }
+        
+        this.onGameOver(this.score);
+      });
   }
   
   /**
    * Nettoie les ressources et événements
    */
-  dispose(): void {
+  public dispose(): void {
     this.stop();
     window.removeEventListener('resize', this.handleResize.bind(this));
     document.removeEventListener('keydown', this.handleKeyDown.bind(this));
@@ -1622,19 +1541,188 @@ private animateEndSequence(deltaTime: number): void {
     }
     // Nettoyer les autres ressources...
   }
+// Dans GameEngine3D.ts
+// Dans GameEngine3D.ts, remplace complètement la méthode startEndAnimation
 
-  // Méthode pour augmenter la taille du collider des bonus
-  private increaseBonusCollider(bonus: Bonus3D, scaleFactor: number): void {
-    const box = new THREE.Box3().setFromObject(bonus.mesh); // Assurez-vous que 'mesh' est l'objet 3D du bonus
-    bonus.collider.min.set(
-      box.min.x - scaleFactor,
-      box.min.y - scaleFactor,
-      box.min.z - scaleFactor
+private preloadKModel(): void {
+  if (!this.kModelLoader) {
+    this.kModelLoader = new GLTFLoader();
+    console.log("🔄 Préchargement du modèle K");
+    
+    this.kModelLoader.load(
+      '/textures/Purple_K_Logo_0321093104_texture.glb',
+      (gltf) => {
+        this.preloadedKModel = gltf.scene.clone();
+        
+        // Changer la couleur du modèle K à #6e398e
+        this.preloadedKModel.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => {
+                if (mat.color) mat.color.set(0x6e398e);
+                mat.emissive = new THREE.Color(0x6e398e); // Ajouter une lueur
+                mat.emissiveIntensity = 0.5; // Ajuster l'intensité de l'émissivité pour l'aura
+              });
+            } else if (child.material.color) {
+              child.material.color.set(0x6e398e);
+              child.material.emissive = new THREE.Color(0x6e398e); // Ajouter une lueur
+              child.material.emissiveIntensity = 0.5; // Ajuster l'intensité de l'émissivité pour l'aura
+            }
+          }
+        });
+        
+        console.log("✅ Modèle K préchargé avec succès");
+      },
+      undefined,
+      (error) => {
+        console.error("❌ Erreur de préchargement:", error);
+        this.preloadedKModel = null;
+      }
     );
-    bonus.collider.max.set(
-      box.max.x + scaleFactor,
-      box.max.y + scaleFactor,
-      box.max.z + scaleFactor
-    );
+    
   }
+}
+public startEndAnimation(): Promise<void> {
+  console.log("🚀 Démarrage de l'animation finale");
+  
+  if (this.isPlayingEndAnimation) {
+    return Promise.resolve();
+  }
+  
+  this.isPlayingEndAnimation = true;
+  this.endAnimationStartTime = performance.now();
+  
+  // Nettoyer la scène
+  this.clearGameObjects();
+  
+  // Créer l'objet K avant d'utiliser GSAP
+  if (this.endGameObject) {
+    this.scene.remove(this.endGameObject);
+    this.endGameObject = null;
+  }
+  
+  // Créer un cube K temporaire si le modèle n'est pas disponible
+  const createTemporaryK = () => {
+    const kGeometry = new THREE.BoxGeometry(5, 10, 2);
+    const kMaterial = new THREE.MeshBasicMaterial({ color: 0x6e398e });
+    return new THREE.Mesh(kGeometry, kMaterial);
+  };
+  
+  // Utiliser le modèle préchargé ou créer un temporaire
+  if (this.preloadedKModel) {
+    this.endGameObject = this.preloadedKModel.clone();
+  } else {
+    this.endGameObject = createTemporaryK();
+  }
+  
+  // Positionner loin du joueur
+  this.endGameObject.scale.set(15, 15, 15);
+  this.endGameObject.position.set(0, 0, -800);
+  this.endGameObject.rotation.y = Math.PI;
+  this.scene.add(this.endGameObject);
+  
+  // Animation avec GSAP
+  return new Promise<void>((resolve) => {
+    const shipPosition = this.ship ? this.ship.position : new THREE.Vector3(0, -8, 0);
+    
+    gsap.to(this.endGameObject.position, {
+      z: shipPosition.z -20,
+      duration: 3,
+      ease: "power2.inOut",
+      onUpdate: () => {
+        // Rotation sur l'axe X
+        this.endGameObject.rotation.x = 0;
+        // Légère oscillation sur Y
+        this.endGameObject.rotation.y = Math.PI + Math.sin(gsap.utils.normalize(0, 1, 
+          gsap.getProperty(this.endGameObject.position, "z", -40, shipPosition.z + 10)) 
+          * Math.PI * 2) * 0.2;
+      },
+      onComplete: () => {
+        setTimeout(() => {
+          this.isPlayingEndAnimation = false;
+          resolve();
+        }, 100);
+      }
+    });
+  });
+}
+// Nouvelle méthode pour nettoyer la scène en gardant uniquement les éléments essentiels
+private clearGameObjects(): void {
+  // Supprimer les planètes
+  if (this.planets) {
+    for (const planet of this.planets) {
+      planet.dispose();    }
+    this.planets = [];
+  }
+  
+  // Supprimer les bonus
+  if (this.bonuses) {
+    for (const bonus of this.bonuses) {
+     bonus.dispose();
+    }
+    this.bonuses = [];
+  }
+  
+  
+  console.log("🧹 Nettoyage de la scène pour l'animation finale");
+}
+private updateEndAnimation(elapsedTime: number, deltaTime: number): void {
+  if (!this.endGameObject) return;
+  
+  const progress = Math.min(elapsedTime / 3, 1); // 3 secondes de durée
+  
+  // Mise à jour de la position/rotation
+  const shipPosition = this.ship ? this.ship.position : new THREE.Vector3(0, -8, 0);
+  
+  // Position du K
+  
+  // Faire avancer le vaisseau vers le K
+  if (this.ship) {
+    // Avancer le vaisseau progressivement
+    this.ship.position.z -= deltaTime * 2; // Vitesse d'avancée ajustable
+
+    // Ajouter une légère oscillation sur Y pour un effet de vol
+  }
+  
+  // Particules occasionnelles
+  if (Math.random() > 0.8) {
+    this.addParticlesForEndAnimation();
+  }
+  
+  // Fin de l'animation
+  if (progress >= 1 && this.isPlayingEndAnimation) {
+    this.isPlayingEndAnimation = false;
+    this.isGameOver = true;  
+    console.log("✅ Animation terminée définitivement");
+  }
+
+}
+private addParticlesForEndAnimation(): void {
+  if (!this.endGameObject) return;
+  
+  const particleGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+  const particleMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0x9966ff,
+    transparent: true,
+    opacity: 0.7
+  });
+  
+  // Ajouter quelques particules
+  for (let i = 0; i < 3; i++) {
+    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+    const x = this.endGameObject.position.x + (Math.random() - 0.5) * 5;
+    const y = this.endGameObject.position.y + (Math.random() - 0.5) * 5;
+    const z = this.endGameObject.position.z - 2;
+    
+    particle.position.set(x, y, z);
+    this.scene.add(particle);
+    
+    // Faire disparaître les particules après un court délai
+    setTimeout(() => {
+      this.scene.remove(particle);
+      particleGeometry.dispose();
+      particleMaterial.dispose();
+    }, 500);
+  }
+}
 }

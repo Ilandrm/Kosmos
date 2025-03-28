@@ -1,7 +1,6 @@
 <template>
   <div class="game-container">
     <div ref="gameContainer" class="game-canvas-container"></div>
-    
     <!-- Game Instructions Overlay -->
     <GameInstruction
       v-if="showInstructions"
@@ -11,7 +10,7 @@
       :instruction="gameInstructions.instruction"
       @start="onInstructionComplete"
     />
-    
+
     <!-- UI overlay - This must show when game is over -->
     <div v-if="(gameState !== 'playing' && !showInstructions) || gameState === 'game-over'" class="game-overlay">
       <!-- Debug information -->
@@ -107,14 +106,23 @@ export default defineComponent({
       lives.value = remainingLives;
     };
     
-    const gameOver = (score: number) => {
-      finalScore.value = score;
-      timeRemaining.value = 0; // Forcer le timer à 0
-      gameState.value = 'game-over';
+    const gameOver = async (score: number) => {
+  console.log('📢 GAME OVER DÉCLENCHÉ');
+  
+  // S'assurer que cette fonction n'est pas appelée plusieurs fois
+  if (gameState.value === 'game-over') {
+    console.log('⚠️ Jeu déjà terminé, appel ignoré');
+    return;
+  }
+  
+  
 
-      // Incrémenter le compteur de parties
-      gameCount.value++;
-    }
+  console.log('📱 Mise à jour de l\'interface utilisateur');
+  gameState.value = 'game-over';
+  finalScore.value = score;
+  timeRemaining.value = 0;
+  gameCount.value++;
+}
 
     // Function to initialize the game engine
     const initGame = () => {
@@ -445,6 +453,46 @@ export default defineComponent({
       }
     });
     
+    // Optimize the rendering loop to reduce lag
+    function render() {
+      if (!isRunning) return;
+
+      // Update game objects
+      updateGameObjects();
+
+      // Clear the canvas
+      renderer.clear();
+
+      // Render the scene
+      renderer.render(scene, camera);
+
+      // Request the next frame
+      requestAnimationFrame(render);
+    }
+
+    // Use a more efficient method to check for collisions
+    function checkCollisions() {
+      const shipBox = this.ship.getBoundingBox();
+      for (let i = 0; i < this.asteroids.length; i++) {
+        const asteroidBox = this.asteroids[i].getBoundingBox();
+        if (shipBox.intersectsBox(asteroidBox)) {
+          this.handleCollision(this.asteroids[i]);
+          this.asteroids.splice(i, 1); // Remove asteroid after collision
+          i--; // Adjust index after removal
+        }
+      }
+    }
+
+    // Limit the number of asteroids rendered based on the game state
+    function updateGameObjects() {
+      if (asteroids.length > MAX_ASTEROIDS) {
+        asteroids = asteroids.slice(0, MAX_ASTEROIDS);
+      }
+      for (const asteroid of asteroids) {
+        asteroid.update();
+      }
+    }
+    
     return {
       gameCount,
       gameContainer,
@@ -476,13 +524,19 @@ export default defineComponent({
 
 <style scoped>
 .game-container {
-  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  height: 100vh;
   background-color: #000;
-  color: #fff;
-  font-family: 'Arial', sans-serif;
+}
+
+@media (max-width: 768px) {
+  .game-container {
+    padding: 10px;
+  }
 }
 
 .game-canvas-container {

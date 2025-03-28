@@ -6,7 +6,6 @@
       <div class="message">
         {{ completionMessage }}
       </div>
-      <RouterLink to="/" class="home-btn">Recommencer</RouterLink>
     </div>
   </div>
 </template>
@@ -74,6 +73,8 @@ const completionMessage = ref(route.params.message || getCompletionMessage())
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  height: 100vh;
 }
 
 h1 {
@@ -84,7 +85,7 @@ h1 {
 }
 
 .message {
-  font-size: 1.5rem;
+  font-size: 2rem;
   line-height: 1.8;
   margin-bottom: 2rem;
   white-space: pre-line;
@@ -113,5 +114,17 @@ h1 {
   background-color: #5ab0ff;
   transform: scale(1.05);
   box-shadow: 0 0 15px rgba(61, 154, 255, 0.7);
+}
+
+@media (max-width: 768px) {
+  .content {
+    padding: 10px;
+  }
+  h1 {
+    font-size: 2rem;
+  }
+  .message {
+    font-size: 1.5rem;
+  }
 }
 </style>

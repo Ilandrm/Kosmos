@@ -41,15 +41,17 @@
         <div class="middle-row">
           <button class="control-button left" @touchstart.prevent="handleTouchStart('ArrowLeft')" @touchend.prevent="handleTouchEnd('ArrowLeft')" @mousedown.prevent="handleTouchStart('ArrowLeft')" @mouseup.prevent="handleTouchEnd('ArrowLeft')">
             <span class="arrow">&#9664;</span>
+            
           </button>
-          <div class="spacer"></div>
+          <button class="control-button down" @touchstart.prevent="handleTouchStart('ArrowDown')" @touchend.prevent="handleTouchEnd('ArrowDown')" @mousedown.prevent="handleTouchStart('ArrowDown')" @mouseup.prevent="handleTouchEnd('ArrowDown')">
+          <span class="arrow">&#9660;</span>
+        </button>
+          <div ></div>
           <button class="control-button right" @touchstart.prevent="handleTouchStart('ArrowRight')" @touchend.prevent="handleTouchEnd('ArrowRight')" @mousedown.prevent="handleTouchStart('ArrowRight')" @mouseup.prevent="handleTouchEnd('ArrowRight')">
             <span class="arrow">&#9654;</span>
           </button>
         </div>
-        <button class="control-button down" @touchstart.prevent="handleTouchStart('ArrowDown')" @touchend.prevent="handleTouchEnd('ArrowDown')" @mousedown.prevent="handleTouchStart('ArrowDown')" @mouseup.prevent="handleTouchEnd('ArrowDown')">
-          <span class="arrow">&#9660;</span>
-        </button>
+        
       </div>
     </div>
 </template>
@@ -753,7 +755,7 @@ export default defineComponent({
         startGame();
       } else {
         // Sinon, passer à l'écran de complétion
-        router.push('/completion');
+        router.push('/games/decryption');
       }
     }
     
@@ -812,11 +814,19 @@ export default defineComponent({
 
 <style scoped>
 .maze-game-container {
-  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
   width: 100%;
   height: 100vh;
-  overflow: hidden;
   background-color: #000;
+}
+
+@media (max-width: 768px) {
+  .maze-game-container {
+    padding: 10px;
+  }
 }
 
 .game-canvas-container {

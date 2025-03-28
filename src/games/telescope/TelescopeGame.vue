@@ -25,7 +25,6 @@
       <div class="game-instructions" v-if="victoryMessageVisible">
         <h2>Mission Accomplie!</h2>
         <p>Félicitations! Vous avez trouvé toutes les planètes.</p>
-        <button class="game-button" @click="startGame">Rejouer</button>
         <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
       

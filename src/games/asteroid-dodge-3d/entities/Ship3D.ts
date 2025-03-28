@@ -14,7 +14,6 @@ export default class Ship3D extends GameObject3D {
   private particles: Float32Array | null = null;
   private particleUpdateSkip: number = 0; // Pour mettre à jour les particules moins fréquemment
   private modelLoaded: boolean = false; // Indicateur si le modèle est chargé
-  
   // Contrôles du vaisseau
   private inputState = {
     moveLeft: false,
@@ -22,11 +21,9 @@ export default class Ship3D extends GameObject3D {
     moveUp: false,
     moveDown: false
   };
-  
   // Positions cibles pour le contrôle à la souris
   private targetX: number | null = null;
   private targetY: number | null = null;
-  
   // Limites de mouvement
   private bounds = {
     minX: -20,
@@ -36,27 +33,24 @@ export default class Ship3D extends GameObject3D {
     minZ: -200, // Limite arrière pour le mouvement en Z (loin en profondeur)
     maxZ: 30    // Limite avant pour le mouvement en Z (près du joueur)
   };
-  
   // Vitesse de déplacement sur l'axe Z (non utilisée dans cette configuration)
   private zMovementSpeed: number = 0;
-  
+  // Add scale and rotation properties
+  public scale: THREE.Vector3 = new THREE.Vector3(1, 1, 1); // Default scale
+  public rotation: THREE.Euler = new THREE.Euler(0, 0, 0); // Default rotation
+
   constructor(scene: THREE.Scene) {
     // Créer un groupe temporaire pour le vaisseau en attendant le chargement du modèle
     const shipGroup = new THREE.Group();
-    
     super(scene, shipGroup);
-    
     // Définir le rayon de collision et la position initiale
     this.boundingRadius = 1.5;
     this.position = new THREE.Vector3(0, -8, 0); // Position initiale à Y=-8 (bas de l'écran) et Z=0
-    
     // S'assurer que les targets sont null au départ pour éviter les mouvements automatiques
     this.targetX = null;
     this.targetY = null;
-    
     // Initialiser la vélocité à zéro pour éviter des mouvements aléatoires au démarrage
     this.velocity = new THREE.Vector3(0, 0, 0);
-    
     // Réinitialiser explicitement tous les états d'entrée à false
     this.inputState = {
       moveLeft: false,
@@ -64,17 +58,22 @@ export default class Ship3D extends GameObject3D {
       moveUp: false,
       moveDown: false
     };
-    
     // Charger le modèle GLB
     this.loadShipModel();
-    
     // Créer le système de particules pour l'effet de propulsion
     this.initThrusterParticles();
-    
     // Mettre en place les écouteurs d'événements pour les contrôles
     this.setupEventListeners();
   }
-  
+
+/**
+ * Sets the rotation of the ship's mesh on the X-axis.
+ * @param angle The angle in radians to set the rotation to.
+ */
+public setMeshRotationX(angle: number): void {
+  this.mesh.rotation.x = angle;
+}
+
   /**
    * Vérifie si le modèle du vaisseau est complètement chargé
    * @returns true si le modèle est chargé, false sinon
@@ -166,7 +165,7 @@ export default class Ship3D extends GameObject3D {
       },
       
       // Callback d'erreur
-      (error: Error) => {
+      (err: unknown) => {
         
         // Créer un vaisseau de secours simple en cas d'échec de chargement
         this.createFallbackShip();
@@ -668,5 +667,13 @@ export default class Ship3D extends GameObject3D {
     const distanceSquared = dx * dx + dy * dy + dz * dz;
     return distanceSquared < (distance * distance);
   }
-}
 
+  /**
+   * Method to make the ship look at a target position
+   * @param target The target position
+   */
+  public lookAt(target: THREE.Vector3): void {
+    const direction = new THREE.Vector3().subVectors(target, this.position).normalize();
+    this.rotation.setFromVector3(direction);
+  }
+}

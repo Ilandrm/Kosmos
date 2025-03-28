@@ -54,49 +54,64 @@ import GameInstruction from '../../components/GameInstruction.vue';
 // Questions du quiz
 const questions = [
   {
-    question: "Quel est le slogan de Koesio ?",
+    question: 'Quelle est la promesse de Koesio ?',
     options: [
-      "Koesio : votre partenaire pour une transformation digitale réussie",
-      "Koesio : des solutions innovantes pour les entreprises de toutes tailles",
-      "Koesio : ensemble, construisons l'avenir numérique de votre entreprise",
-      "Koesio : au cœur de votre transformation numérique"
+      'Koesio : votre partenaire pour une transformation digitale réussie',
+      'Koesio : des solutions innovantes pour les entreprises de toutes tailles',
+      'Koesio : ensemble, construisons l\'avenir numérique de votre entreprise',
+      'Koesio : au cœur de votre transformation numérique'
     ],
     correctAnswer: 3
   },
   {
-    question: "En quelle année Koesio a-t-elle été fondée ?",
-    options: ["1991", "2002", "2011", "2021"],
+    question: 'Comme les vaisseaux spatiaux qui orbitent autour de la Terre, quelle technologie permet aux données de votre entreprise d\'être accessibles de partout ?',
+    options: [
+      'Les serveurs physiques locaux',
+      'Les disques durs externes',
+      'Les solutions cloud de Koesio',
+      'Les imprimantes en réseau'
+    ],
+    correctAnswer: 2
+  },
+  {
+    question: 'Dans l\'espace, les systèmes autonomes sont essentiels pour maintenir les opérations en cas de perte de communication avec la Terre. Quelle solution Koesio assure la continuité des activités même en cas de panne ?',
+    options: [
+      'Le Plan de Continuité d\'Activité (PCA)',
+      'Les imprimantes connectées',
+      'Les smartphones d\'entreprise',
+      'Les écrans tactiles'
+    ],
     correctAnswer: 0
   },
   {
-    question: "Quel est le rôle du centre de reconditionnement EOLE de Koesio ?",
+    question: 'Dans une station spatiale, chaque document technique doit être accessible rapidement en cas d\'urgence. Quelle solution Koesio offre un accès similaire aux documents essentiels d\'une entreprise ?',
     options: [
-      "Un centre de formation aux métiers du numérique",
-      "Un centre de logistique et de reconditionnement des matériels d'impression",
-      "Un espace de coworking et d'innovation",
-      "Un showroom présentant les dernières technologies de l'entreprise"
+      'La Gestion Électronique des Documents (GED)',
+      'Les imprimantes multifonctions',
+      'Les ordinateurs portables',
+      'Les serveurs physiques'
     ],
-    correctAnswer: 1
+    correctAnswer: 0
   },
   {
-    question: "Comment Koesio encourage-t-il la formation et le développement de ses collaborateurs ?",
+    question: 'Dans une mission spatiale, différents systèmes de communication doivent fonctionner ensemble parfaitement. Quelle offre Koesio intègre de multiples canaux de communication en une seule plateforme ?',
     options: [
-      "En proposant un catalogue de formations en ligne",
-      "En mettant en place des parcours de carrière personnalisés",
-      "En offrant des opportunités de mobilité interne",
-      "Toutes ces réponses"
+      'Les imprimantes multifonctions',
+      'Les ordinateurs de bureau',
+      'Les solutions de téléphonie traditionnelle',
+      'La messagerie unifiée et collaborative'
     ],
     correctAnswer: 3
   },
   {
-    question: "Je suis la planète rouge, mais je ne suis pas en colère. Qui suis-je ?",
-    options: ["La Terre", "Saturne", "Jupiter", "Mars"],
-    correctAnswer: 3
-  },
-  {
-    question: "Koesio propose des contrats de maintenance pour ses photocopieurs. Un contrat coûte 150 € par an et par photocopieur. Si Koesio a 1500 clients et que chaque client possède en moyenne 2 photocopieurs, quel est le chiffre d'affaires potentiel de Koesio avec les contrats de maintenance ?",
-    options: ["450 000 €", "583 200 €", "600 000 €", "750 000 €"],
-    correctAnswer: 1
+    question: 'À l\'image des communications vidéo entre les astronautes et le centre de contrôle, quelle solution Koesio permet des réunions à distance avec partage visuel ?',
+    options: [
+      'La téléphonie fixe analogique',
+      'Les fax numériques',
+      'Les solutions de visioconférence HD',
+      'Le courrier postal'
+    ],
+    correctAnswer: 2
   }
 ]
 
@@ -270,19 +285,19 @@ onMounted(() => {
 
 <style scoped>
 .quiz-game-container {
-  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
   width: 100%;
-  margin: 0;
-  font-family: 'Orbitron', sans-serif;
-  color: white;
-  background: 
-    radial-gradient(circle at 50% 50%, rgba(0, 41, 102, 0.3) 0%, transparent 100%),
-    radial-gradient(circle at 20% 30%, rgba(128, 0, 255, 0.4) 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, rgba(0, 209, 255, 0.3) 0%, transparent 50%),
-    radial-gradient(circle at 60% 40%, rgba(238, 130, 238, 0.3) 0%, transparent 60%),
-    linear-gradient(45deg, #000428 0%, #140028 30%, #1B004B 70%, #002447 100%);
-  position: relative;
-  overflow: hidden;
+  height: 100vh;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 41, 102, 0.3) 0%, transparent 100%);
+}
+
+@media (max-width: 768px) {
+  .quiz-game-container {
+    padding: 10px;
+  }
 }
 
 .stars {

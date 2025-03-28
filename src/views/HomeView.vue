@@ -3,7 +3,7 @@
     <div class="stars-bg"></div>
     <div class="container">
       <header class="header">
-        <h1 class="neon-text">KOSMOS</h1>
+        <h1 class="neon-text">Démarrez l'expérience</h1>
         <p class="subtitle">Une expérience spatiale immersive</p>
       </header>
       
@@ -22,9 +22,14 @@ const router = useRouter()
 function startSequence() {
   // Afficher la consigne puis rediriger vers le premier jeu
   const message = "Bienvenue à bord l'équipage, vous allez effectuer plusieurs missions qui vont se succéder. Lisez bien les consignes, l'avenir de la planète K dépend de votre réussite.\n\nLe temps est compté, soyez efficaces."
-  
+  if (document.fullscreenEnabled) {
+  const element = document.querySelector('.kosmos-app');
+  element?.requestFullscreen();
+  }
   // Redirect to the mission introduction view
   router.push({ name: 'mission-introduction' });
+  
+
 }
 </script>
 

@@ -79,6 +79,12 @@ function startGame() {
   box-shadow: 0 0 30px rgba(61, 154, 255, 0.5);
   text-align: center;
   animation: fadeIn 0.5s ease-out;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
 }
 
 @keyframes fadeIn {
@@ -149,5 +155,11 @@ h1 {
   background-color: #5ab0ff;
   transform: scale(1.05);
   box-shadow: 0 0 15px rgba(61, 154, 255, 0.7);
+}
+
+@media (max-width: 768px) {
+  .instruction-panel {
+    padding: 10px;
+  }
 }
 </style>

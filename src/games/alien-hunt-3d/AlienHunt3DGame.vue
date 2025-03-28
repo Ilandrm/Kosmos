@@ -26,33 +26,36 @@
         <p>Temps: {{ formattedTime }}</p>
         <button @click="continueToNextGame" class="continue-btn">Continuer</button>
       </div>
-    </div>
     
     <!-- Game HUD -->
     <div v-if="gameState === 'playing'" class="game-hud">
       <div class="timer">Temps: {{ formattedTime }}</div>
     </div>
     
-    <!-- Cannon controls -->
-    <div v-if="gameState === 'playing'" class="cannons-container">
-      <div 
-        v-for="(cannon, index) in cannons" 
-        :key="index" 
-        :class="['cannon', {'active': selectedCannon === index, 'reloading': !cannon.canShoot}]"
-        :style="{
-          left: `${index === 0 ? 20 : index === 1 ? 40 : index === 2 ? 60 : 80}%`,
-          transform: `rotate(${cannon.rotation}deg)`
-        }"
-        @mousedown="selectCannon(index, $event)"
-        @touchstart.prevent="selectCannonTouch(index, $event)"              >
-        <div class="cannon-base"></div>
-        <div class="cannon-barrel"></div>
-        <div v-if="!cannon.canShoot" class="reload-indicator"></div>
-      </div>
-    </div>
-    
-    <!-- Aim Tracers - un par canon -->
-    <div 
+ 
+<!-- Cannon controls -->
+<div 
+  v-for="(cannon, index) in cannons" 
+  :key="index"
+  class="cannon" 
+  :class="[ {'active': selectedCannon === index, 'reloading': !cannon.canShoot}]"
+  :style="{
+    left: `${index === 0 ? 30 : index === 1 ? 70 : index === 2 ? 30 : 70}%`,
+    top: `${index < 2 ? 'auto' : '0'}`,
+    bottom: `${index < 2 ? '0' : 'auto'}`,
+    transform: `rotate(${cannon.rotation}deg) ${index >= 2 ? 'rotate(180deg)' : ''}`,
+    borderColor: cannon.color
+  }"
+  @mousedown="selectCannon(index, $event)"
+  @touchstart.prevent="selectCannonTouch(index, $event)"
+>
+  <div class="cannon-base" :style="{ backgroundColor: cannon.color }"></div>
+  <div class="cannon-barrel" :style="{ backgroundColor: cannon.color }"></div>
+  <div v-if="!cannon.canShoot" class="reload-indicator" :style="{ borderColor: cannon.color }"></div>
+</div>
+
+   <!-- Aim Tracers - un par canon -->
+   <div 
       v-for="(cannon, index) in cannons" 
       :key="'tracer-'+index"
       v-if="cannon && cannon.isAiming && gameState === 'playing'" 
@@ -66,20 +69,14 @@
       }">
       <div class="aim-tracer-inner"></div>
     </div>
-    
+
+
     <!-- Player Names -->
-    <div v-if="gameState === 'playing'" class="player-names">
-      <div 
-        v-for="(name, index) in playerNames" 
-        :key="'player-'+index"
-        class="player-name"
-        :style="{ color: playerColors[index] }"
-      >
-        {{ name }}
-      </div>
-    </div>
+    
+  </div>
 
 </template>
+
 
 <script lang="ts">
 import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
@@ -270,15 +267,86 @@ export default defineComponent({
   
   // Update cannon state
   cannons.value[index].isAiming = true;
+  selectedCannon.value = index;  // Make sure to select this cannon
   
   // Set initial aim position
-  cannons.value[index].aimPosition = {
-    x: touch.clientX,
-    y: touch.clientY
-  };
+  updateAimRotationTouch(index, touch);
   
   // Initial tracer
   createTracer(index, cannons.value[index].rotation);
+  
+  // Add touch event listeners
+  document.addEventListener('touchmove', handleTouchMove, { passive: false });
+  document.addEventListener('touchend', handleTouchEnd);
+  document.addEventListener('touchcancel', handleTouchEnd);
+}
+
+function handleTouchMove(event: TouchEvent) {
+  event.preventDefault();
+  
+  // Process each changed touch
+  for (let i = 0; i < event.changedTouches.length; i++) {
+    const touch = event.changedTouches[i];
+    const touchId = touch.identifier;
+    
+    // Check if this touch is controlling a cannon
+    if (activeTouches.value[touchId]) {
+      const cannonIndex = activeTouches.value[touchId].cannonIndex;
+      
+      // Update aiming for this cannon
+      updateAimRotationTouch(cannonIndex, touch);
+      
+      // Update tracer
+      updateTracer(cannonIndex, cannons.value[cannonIndex].aimRotation);
+    }
+  }
+}
+
+function handleTouchEnd(event: TouchEvent) {
+  // Process each changed touch
+  for (let i = 0; i < event.changedTouches.length; i++) {
+    const touch = event.changedTouches[i];
+    const touchId = touch.identifier;
+    
+    // Check if this touch was controlling a cannon
+    if (activeTouches.value[touchId]) {
+      const cannonIndex = activeTouches.value[touchId].cannonIndex;
+      
+      // Fire the cannon
+      handleShoot(cannonIndex);
+      
+      // Clear the aiming state
+      cannons.value[cannonIndex].isAiming = false;
+      if (selectedCannon.value === cannonIndex) {
+        selectedCannon.value = -1;
+      }
+      
+      // Remove this touch from active touches
+      delete activeTouches.value[touchId];
+    }
+  }
+  
+  // If no more active touches, remove event listeners
+  if (Object.keys(activeTouches.value).length === 0) {
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+    document.removeEventListener('touchcancel', handleTouchEnd);
+  }
+}
+
+function updateTracer(cannonIndex, angle) {
+  // Remove old tracers for this cannon
+  for (let i = tracers.length - 1; i >= 0; i--) {
+    const tracer = tracers[i];
+    const data = objectData.get(tracer) as TracerData;
+    if (data && data.player === cannonIndex) {
+      scene.remove(tracer);
+      tracers.splice(i, 1);
+    }
+  }
+  
+  // Create a new tracer
+  createTracer(cannonIndex, angle);
 }
 
     function onInstructionComplete() {
@@ -361,19 +429,31 @@ export default defineComponent({
       // Créer ou mettre à jour la fonction de mise à jour pour ce canon
       const updateFunction = () => {
         // Position fixe des canons en bas de l'écran
-        const cannonPositions = [
-          { x: window.innerWidth * 0.2, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.4, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.6, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.8, y: window.innerHeight - 50 }
-        ];
+       // Position des canons - les deux premiers en bas, les deux derniers en haut
+const cannonPositions = [
+  { x: window.innerWidth * 0.3, y: window.innerHeight - 50 }, // Bottom left
+  { x: window.innerWidth * 0.7, y: window.innerHeight - 50 }, // Bottom right
+  { x: window.innerWidth * 0.3, y: 50 },                     // Top left
+  { x: window.innerWidth * 0.7, y: 50 }                      // Top right
+];
         
         const cannonPos = cannonPositions[cannonIndex];
         
         // Calculer l'angle entre le canon et la dernière position de la souris
-        const dx = lastMousePosition.x - cannonPos.x;
-        const dy = cannonPos.y - lastMousePosition.y;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        // Calculer l'angle entre le canon et la dernière position de la souris
+const dx = lastMousePosition.x - cannonPos.x;
+let dy;
+
+// Inverser la direction Y pour les canons du haut (index 2 et 3)
+if (cannonIndex < 2) {
+  // Bottom cannons
+  dy = cannonPos.y - lastMousePosition.y; // Y decreases upward
+} else {
+  // Top cannons
+  dy = lastMousePosition.y - cannonPos.y; // Y increases downward for top cannons
+}
+
+const angle = Math.atan2(dy, dx) * (180 / Math.PI);
         
         // Limiter l'angle pour que le canon ne puisse pas tirer vers le bas
         const clampedAngle = Math.min(Math.max(angle, 0), 180);
@@ -423,19 +503,30 @@ export default defineComponent({
       // Créer ou mettre à jour la fonction de mise à jour pour ce canon
       const updateFunction = () => {
         // Position fixe des canons en bas de l'écran
-        const cannonPositions = [
-          { x: window.innerWidth * 0.2, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.4, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.6, y: window.innerHeight - 50 },
-          { x: window.innerWidth * 0.8, y: window.innerHeight - 50 }
-        ];
+      const cannonPositions = [
+  { x: window.innerWidth * 0.3, y: window.innerHeight - 50 }, // Bottom left
+  { x: window.innerWidth * 0.7, y: window.innerHeight - 50 }, // Bottom right
+  { x: window.innerWidth * 0.3, y: 50 },                     // Top left
+  { x: window.innerWidth * 0.7, y: 50 }                      // Top right
+];
         
         const cannonPos = cannonPositions[cannonIndex];
         
         // Calculer l'angle entre le canon et la position tactile
-        const dx = lastMousePosition.x - cannonPos.x;
-        const dy = cannonPos.y - lastMousePosition.y;
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        // Calculer l'angle entre le canon et la dernière position de la souris
+const dx = lastMousePosition.x - cannonPos.x;
+let dy;
+
+// Inverser la direction Y pour les canons du haut (index 2 et 3)
+if (cannonIndex < 2) {
+  // Bottom cannons
+  dy = cannonPos.y - lastMousePosition.y; // Y decreases upward
+} else {
+  // Top cannons
+  dy = lastMousePosition.y - cannonPos.y; // Y increases downward for top cannons
+}
+
+const angle = Math.atan2(dy, dx) * (180 / Math.PI);
         
         // Limiter l'angle pour que le canon ne puisse pas tirer vers le bas
         const clampedAngle = Math.min(Math.max(angle, 0), 180);
@@ -792,43 +883,50 @@ export default defineComponent({
     }
     
     function createCannons() {
-      // Créer 4 cannons 3D à la base de l'écran
-      cannonsObjects = [];
-      
-      for (let i = 0; i < 4; i++) {
-        const cannonGroup = new THREE.Group();
-        
-        // Base du canon
-        const baseGeometry = new THREE.CylinderGeometry(1, 1.5, 0.5, 16);
-        const baseMaterial = new THREE.MeshPhongMaterial({
-          color: new THREE.Color(playerColors[i]),
-          shininess: 50
-        });
-        const base = new THREE.Mesh(baseGeometry, baseMaterial);
-        
-        // Canon (tube)
-        const barrelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
-        const barrelMaterial = new THREE.MeshPhongMaterial({
-          color: 0x333333,
-          shininess: 70
-        });
-        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-        barrel.rotation.x = Math.PI / 2; // Orienter le canon horizontalement
-        barrel.position.set(0, 0.5, 0.5); // Positionner au-dessus de la base
-        
-        // Ajouter les éléments au groupe
-        cannonGroup.add(base);
-        cannonGroup.add(barrel);
-        
-        // Positionner le canon
-        const x = (i * 7) - 10.5; // Répartir les canons (-10.5, -3.5, 3.5, 10.5)
-        cannonGroup.position.set(x, -5, 10); // En bas de l'écran
-        
-        // Ajouter le canon à la scène
-        scene.add(cannonGroup);
-        cannonsObjects.push(cannonGroup);
-      }
+  // Créer 4 cannons 3D, 2 en bas et 2 en haut de l'écran
+  cannonsObjects = [];
+  
+  for (let i = 0; i < 4; i++) {
+    const cannonGroup = new THREE.Group();
+    
+    // Base du canon
+    const baseGeometry = new THREE.CylinderGeometry(1, 1.5, 0.5, 16);
+    const baseMaterial = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(playerColors[i]),
+      shininess: 50
+    });
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    
+    // Canon (tube)
+    const barrelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
+    const barrelMaterial = new THREE.MeshPhongMaterial({
+      color: 0x333333,
+      shininess: 70
+    });
+    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+    barrel.rotation.x = Math.PI / 2; // Orienter le canon horizontalement
+    barrel.position.set(0, 0.5, 0.5); // Positionner au-dessus de la base
+    
+    // Ajouter les éléments au groupe
+    cannonGroup.add(base);
+    cannonGroup.add(barrel);
+    
+    // Positionner le canon
+    const x = (i % 2 === 0 ? -3 : 3); // Positionner les canons plus près du centre
+    const y = (i < 2 ? -5 : 5); // Deux canons en bas, deux en haut
+    
+    cannonGroup.position.set(x, y, 10);
+    
+    // Orienter les canons du haut vers le bas
+    if (i >= 2) {
+      cannonGroup.rotation.z = Math.PI; // Retourner les canons du haut
     }
+    
+    // Ajouter le canon à la scène
+    scene.add(cannonGroup);
+    cannonsObjects.push(cannonGroup);
+  }
+}
     
     function createStars() {
       const starsGeometry = new THREE.BufferGeometry();
@@ -1882,13 +1980,23 @@ function cleanPlayerTracers(playerIndex: number) {
 });
 </script>
 
+
+
 <style scoped>
 .alien-hunt-container {
-  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
   width: 100%;
   height: 100vh;
-  overflow: hidden;
-  background-color: #000;
+  background-color: #050a2f;
+}
+
+@media (max-width: 768px) {
+  .alien-hunt-container {
+    padding: 10px;
+  }
 }
 
 .game-canvas-container {
@@ -2003,26 +2111,33 @@ button:hover {
   margin: 0.5rem 0;
 }
 
-/* Cannon CSS representation */
 .cannons-container {
   position: absolute;
-  bottom: 20px;
   left: 0;
   width: 100%;
-  height: 80px;
-  z-index: 5;
+  height: 100%; /* Étendre sur toute la hauteur pour contenir les canons haut et bas */
   pointer-events: none;
 }
 
 .cannon {
   position: absolute;
-  bottom: 0;
   width: 50px;
   height: 80px;
   transform-origin: bottom center;
-  pointer-events: auto;
   cursor: pointer;
   transition: transform 0.3s ease;
+  pointer-events: auto;
+}
+
+.cannon:nth-child(1),
+.cannon:nth-child(2) {
+  bottom: 0;
+}
+
+.cannon:nth-child(3),
+.cannon:nth-child(4) {
+  top: 0;
+  transform-origin: top center;
 }
 
 .cannon-base {
