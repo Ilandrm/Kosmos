@@ -318,7 +318,7 @@ export default defineComponent({
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
-  background-image: url('/assets/images/space-hangman/stars-bg.png');
+  background-image: url('/Kosmos/assets/images/space-hangman/stars-bg.png');
   background-size: cover;
   border-radius: 10px;
   box-shadow: 0 0 20px rgba(0, 0, 255, 0.3);

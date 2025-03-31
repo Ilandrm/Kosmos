@@ -124,11 +124,11 @@ export default class Planet3D extends GameObject3D {
       const textureLoader = new TextureLoader();
       
       // Charger les textures des planètes
-      this.textures.earth = textureLoader.load('/textures/planets/earth.jpg');
-      this.textures.mars = textureLoader.load('/textures/planets/mars.jpg');
-      this.textures.venus = textureLoader.load('/textures/planets/venus.jpg');
-      this.textures.jupiter = textureLoader.load('/textures/planets/jupiter.jpg');
-      this.textures.neptune = textureLoader.load('/textures/planets/neptune.jpg');
+      this.textures.earth = textureLoader.load('Kosmos/textures/planets/earth.jpg');
+      this.textures.mars = textureLoader.load('Kosmos/textures/planets/mars.jpg');
+      this.textures.venus = textureLoader.load('Kosmos/textures/planets/venus.jpg');
+      this.textures.jupiter = textureLoader.load('Kosmos/textures/planets/jupiter.jpg');
+      this.textures.neptune = textureLoader.load('Kosmos/textures/planets/neptune.jpg');
       
       // Configurer les textures
       const textures = [this.textures.earth, this.textures.mars, this.textures.venus, 
