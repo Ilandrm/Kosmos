@@ -91,8 +91,8 @@ public setMeshRotationX(angle: number): void {
     // Charger le modèle
     loader.load(
       // URL du modèle
-      'Kosmos/textures/Créer_un_vaisseau_sp_0305092734_texture.glb',
-      
+      '/textures/Créer_un_vaisseau_sp_0305092734_texture.glb',
+
       // Callback appelé lorsque le modèle est chargé
       (gltf: THREE.GLTF) => {
         // Déterminer l'échelle et l'orientation appropriées pour le modèle

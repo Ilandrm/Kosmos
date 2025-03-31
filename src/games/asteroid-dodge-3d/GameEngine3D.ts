@@ -1550,7 +1550,7 @@ private preloadKModel(): void {
     console.log("🔄 Préchargement du modèle K");
     
     this.kModelLoader.load(
-      'Kosmos/textures/Purple_K_Logo_0321093104_texture.glb',
+      'textures/Purple_K_Logo_0321093104_texture.glb',
       (gltf) => {
         this.preloadedKModel = gltf.scene.clone();
         
