@@ -217,7 +217,7 @@ function restartGame() {
 function continueToNextGame() {
   const nextGame = getNextGame('koesio-quiz')
   if (nextGame === 'maze-3d') {
-    router.push('/games/maze-3d')
+    router.push({ name: 'maze-3d' });
   } else if (nextGame === 'completion') {
     router.push('/completion')
   } else if (nextGame) {

@@ -63,6 +63,7 @@ import { defineComponent, ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getNextGame, isLastGame } from '@/services/GameFlowService';
 import GameInstruction from '@/components/GameInstruction.vue';
+import router from "@/router";
 
 export default defineComponent({
   name: 'SpaceHangmanGame',
@@ -239,7 +240,7 @@ export default defineComponent({
     const continueToNextGame = () => {
       const nextGame = getNextGame('space-hangman');
       if (nextGame === 'alien-hunt-3d') {
-        window.location.href = '/games/alien-hunt-3d';
+        router.push({name:'alien-hunt-3d'})
       } else if (nextGame === 'completion') {
         window.location.href = '/completion';
       } else if (nextGame) {

@@ -1446,7 +1446,7 @@ function updateAimRotationTouch(cannonIndex: number, touch: Touch) {
     function continueToNextGame() {
       const nextGame = GameFlowService.getNextGame('alien-hunt-3d');
       if (nextGame === 'koesio-quiz') {
-        router.push('/games/koesio-quiz').catch(err => {
+        router.push('koesio-quiz').catch(err => {
         });
       } else if (nextGame === 'completion') {
         router.push('/completion').catch(err => {

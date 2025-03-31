@@ -755,7 +755,8 @@ export default defineComponent({
         startGame();
       } else {
         // Sinon, passer à l'écran de complétion
-        router.push('/games/decryption');
+        router.push({ name: 'DecryptionMiniGame' });
+
       }
     }
     
