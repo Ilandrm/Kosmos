@@ -72,7 +72,7 @@ private rotation: THREE.Vector3; // Add rotation property
     const loader = new GLTFLoader();
     
     loader.load(
-        `${import.meta.env.BASE_URL}textures/textures/Créer_un_vaisseau_sp_0305092734_texture.glb`,
+        `${import.meta.env.BASE_URL}textures/Créer_un_vaisseau_sp_0305092734_texture.glb`,
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(2.0, 2.0, 2.0); // Augmenter la taille du vaisseau
