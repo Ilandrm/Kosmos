@@ -168,7 +168,7 @@ private endAnimationStartTime: number = 0;
       sizeAttenuation: true
     });
     
-    const starsCount = 1000; // Réduction du nombre d'étoiles statiques
+    const starsCount = 5000; // Réduction du nombre d'étoiles statiques
     const starsPositions = new Float32Array(starsCount * 3);
     
     for (let i = 0; i < starsCount; i++) {
@@ -188,114 +188,80 @@ private endAnimationStartTime: number = 0;
   }
   // Méthode pour démarrer l'animation de fin
   // Méthode pour démarrer l'animation de fin
-  /** 
-   * Crée l'effet d'hypervitesse/hyperespace avec uniquement des lignes lumineuses
-   * moins intenses pour ne pas distraire du jeu principal
-   */
   private createHyperspaceEffect(): void {
     // Créer un groupe pour contenir l'effet tunnel hyperspatial
     this.hyperspaceStars = new THREE.Group();
     
-    // Groupe pour les lignes lumineuses
+    // Utiliser un seul groupe au lieu de deux
     this.hyperspaceOutgoing = new THREE.Group();
-    this.hyperspaceIncoming = new THREE.Group();
     
-    // Paramètres du tunnel
-    const tunnelRadius = 30;
+    // Paramètres du tunnel optimisés
+    const tunnelRadius = 20;
     const tunnelLength = 400;
-    const trailsCount = 350; // Nombre total de traînées lumineuses
+    const trailsCount = 250; // Réduction du nombre de lignes pour les performances
     
-    // Palette de couleurs principalement grises et bleuâtres
+    // Palette de couleurs simplifiée
     const hyperspaceColors = [
-      new THREE.Color(0xcccccc), // Gris clair (dominant - 60%)
+      new THREE.Color(0xcccccc), // Gris clair (dominant)
       new THREE.Color(0xbbc5d0), // Gris bleuâtre
-      new THREE.Color(0xa9b2c3), // Gris acier
-      new THREE.Color(0x8899aa), // Gris bleu foncé
-      new THREE.Color(0x778899), // Bleu ardoise foncé
-      new THREE.Color(0x5d6d7e)  // Gris bleu moyen
+      new THREE.Color(0x8899aa)  // Gris bleu foncé
     ];
     
-    // Augmentation du nombre de lignes pour un effet plus dense
-    const enhancedTrailsCount = 550; // Plus de lignes pour un effet plus immersif
+    // Taille du "trou" central - paramètre crucial pour éviter les clignotements
+    const centralHoleRadius = 15;
     
-    // Créer le tunnel principal - avec des lignes droites qui convergent vers un trou central
-    for (let i = 0; i < enhancedTrailsCount; i++) {
+    // Créer le tunnel principal
+    for (let i = 0; i < trailsCount; i++) {
       // Position aléatoire sur la circonférence du tunnel
-      const angle = Math.random() * Math.PI * 2; // Distribution uniforme sur 360 degrés
+      const angle = Math.random() * Math.PI * 2;
       
-      // Créer un trou au centre en définissant un rayon minimum
-      const centralHoleRadius = 15; // Taille du trou de convergence au centre
-      const maxRadius = 40; // Extension maximale des lignes pour couvrir l'écran
+      // S'assurer que le rayon de départ est toujours au moins égal au rayon du trou central
+      const startRadius = centralHoleRadius + Math.random() * 25;
+      const zPos = -tunnelLength + Math.random() * tunnelLength * 2;
       
-      // Le rayon de départ commence au rayon du trou central minimum
-      const startRadius = centralHoleRadius + Math.random() * (maxRadius - centralHoleRadius);
+      // Géométrie individuelle pour chaque ligne - avec écart du centre
+      const linePoints = [
+        new THREE.Vector3(
+          Math.cos(angle) * startRadius,
+          Math.sin(angle) * startRadius,
+          0
+        ),
+        new THREE.Vector3(
+          Math.cos(angle) * (startRadius * 0.8), // Rétrécissement pour l'effet de convergence
+          Math.sin(angle) * (startRadius * 0.8),
+          -25  // Longueur fixe de la ligne
+        )
+      ];
       
-      // Position de départ de la ligne dans le tunnel
-      const zPos = -tunnelLength + Math.random() * tunnelLength * 2; // Position aléatoire dans le tunnel
-      
-      // Paramètres des lignes - optimisés pour les performances
-      const lineLength = 25 + Math.random() * 25; // Lignes plus uniformes
-      const lineSegments = 2; // Réduction drastique du nombre de segments - lignes droites uniquement
-      
-      // Générer des points pour des lignes parfaitement droites qui convergent vers le centre
-      const linePoints = [];
-      for (let j = 0; j <= lineSegments; j++) {
-        const segmentLength = (j / lineSegments) * lineLength;
-        // Lignes parfaitement droites convergeant vers le centre
-        linePoints.push(new THREE.Vector3(
-          Math.cos(angle) * (startRadius - segmentLength * 0.2), // Convergence progressive vers le centre
-          Math.sin(angle) * (startRadius - segmentLength * 0.2),
-          zPos - segmentLength
-        ));
-      }
-      
-      // Créer la géométrie de la ligne
       const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
       
-      // Sélection de couleur favorisant le blanc et bleu
-      let lineColorIndex;
-      const colorRoll = Math.random();
-      if (colorRoll < 0.6) {
-        lineColorIndex = 0; // 60% de chance d'avoir des lignes blanches
-      } else if (colorRoll < 0.8) {
-        lineColorIndex = 1; // 20% de chance d'avoir du blanc légèrement bleu
-      } else {
-        lineColorIndex = 2 + Math.floor(Math.random() * 4); // 20% réparti sur les différentes teintes de bleu
-      }
+      // Sélection de couleur simplifiée
+      const lineColorIndex = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
       const lineColor = hyperspaceColors[lineColorIndex];
       
-      // Matériau simple sans brillance pour des lignes sobres
+      // Matériau optimisé
       const lineMaterial = new THREE.LineBasicMaterial({
         color: lineColor,
         transparent: true,
-        opacity: 0.7, // Opacité réduite pour un effet moins intense
-        linewidth: 1 // Lignes encore plus fines pour un effet plus discret
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
       });
       
-      // Désactivation des effets de brillance
-      lineMaterial.toneMapped = true; // Activer le tone mapping pour atténuer les couleurs
-      lineMaterial.depthWrite = true; // Permettre l'occultation normale des lignes
-      
-      // Réduire la luminosité pour un effet plus terne
-      const mutedColor = new THREE.Color(lineColor);
-      mutedColor.r = Math.min(1, mutedColor.r * 0.7);
-      mutedColor.g = Math.min(1, mutedColor.g * 0.7);
-      mutedColor.b = Math.min(1, mutedColor.b * 0.7);
-      lineMaterial.color = mutedColor;
-      
-      // Créer la ligne lumineuse finale
+      // Créer la ligne
       const line = new THREE.Line(lineGeometry, lineMaterial);
       
-      // Ajouter des données utilisateur pour l'animation
+      // Positionner la ligne
+      line.position.z = zPos;
+      
+      // Stocker uniquement les données essentielles
       line.userData = {
         angle: angle,
         radius: startRadius,
-        speed: 40 + Math.random() * 80, // Vitesse variable
+        speed: 50 + Math.random() * 70,
         z: zPos,
-        baseColor: lineColor.clone(), // Stocker la couleur de base pour les variations
+        baseColor: lineColor.clone(),
         lifetime: 0,
-        maxLifetime: 4 + Math.random() * 3, // Durée de vie avant réinitialisation
-        animationOffset: Math.random() * Math.PI * 2 // Offset aléatoire pour l'animation
+        maxLifetime: 4 + Math.random() * 2
       };
       
       // Ajouter la ligne au groupe
@@ -304,9 +270,8 @@ private endAnimationStartTime: number = 0;
     
     // Ajouter les groupes au groupe principal
     this.hyperspaceStars.add(this.hyperspaceOutgoing);
-    this.hyperspaceStars.add(this.hyperspaceIncoming);
     
-    // Ajouter une inclinaison plus prononcée pour un effet plus dynamique
+    // Ajouter l'inclinaison
     this.hyperspaceStars.rotation.x = Math.PI * 0.08;
     
     if (this.scene) {
@@ -315,167 +280,117 @@ private endAnimationStartTime: number = 0;
   }
   
   /**
-   * Anime l'effet d'hypervitesse avec un tunnel spatial dynamique uniquement composé de lignes
+   * Anime l'effet d'hypervitesse avec un tunnel spatial optimisé
    * @param deltaTime Temps écoulé depuis la dernière frame
    */
   private animateStars(deltaTime: number): void {
-    // Animation du champ d'étoiles arrière-plan 
+    // Animation du champ d'étoiles arrière-plan
     if (this.starField) {
-      this.starField.rotation.y += deltaTime * 0.001; // Rotation plus rapide
-      // Opacité réduite pendant l'effet d'hypervitesse
+      this.starField.rotation.y += deltaTime * 0.001;
       (this.starField.material as THREE.PointsMaterial).opacity = 0.4;
     }
     
     // Animation du tunnel spatial
     if (!this.hyperspaceStars || !this.hyperspaceOutgoing) return;
     
-    // Rotation simple et constante du tunnel pour un effet propre et stable
-    // Seulement rotation sur l'axe Z (dans le plan de l'écran) pour éviter les bugs visuels
-    this.hyperspaceStars.rotation.z += deltaTime * 0.02;
-    
-    // Réinitialiser les autres rotations pour éviter les effets indésirables
+    // Rotation simple du tunnel - plus légère
+    this.hyperspaceStars.rotation.z += deltaTime * 0.01; // Réduit de moitié
     this.hyperspaceStars.rotation.x = 0;
     this.hyperspaceStars.rotation.y = 0;
+    
+    // Utiliser un timer pour limiter les mises à jour
+    this._animationCounter = (this._animationCounter || 0) + deltaTime;
+    const shouldUpdateGeometry = this._animationCounter > 0.05; // Mettre à jour à 20fps max
+    
+    if (shouldUpdateGeometry) {
+      this._animationCounter = 0;
+    }
+    
+    // Constantes pour le trou central - empêche les lignes d'aller au centre
+    const centralHoleRadius = 15;
     
     // Parcours des lignes lumineuses
     this.hyperspaceOutgoing.children.forEach((child) => {
       if (child instanceof THREE.Line) {
         const line = child as THREE.Line;
         const userData = line.userData;
-        if (userData) {
-          // Incrémenter le compteur de durée de vie
-          userData.lifetime += deltaTime;
-          
-          // Mise à jour de la position Z (déplacement vers l'avant)
-          userData.z += userData.speed * deltaTime * 4.0; // Vitesse augmentée de 300%
-          
-          // On garde l'angle fixe pour chaque ligne - pas de variation pour éviter la dispersion
-          // userData.angle reste constant tout au long de la vie de la ligne
-          
-          // Mise à jour de la géométrie de la ligne
-          const lineGeometry = line.geometry as THREE.BufferGeometry;
-          const positions = [];
-          
-          // Générer des points pour des lignes ABSOLUMENT droites qui convergent vers le centre
-          const lineLength = 25 + Math.random() * 15; // Lignes plus courtes pour plus de détails
-          const lineSegments = 2; // SEULEMENT 2 points pour garantir des lignes parfaitement droites
-          
-          // Angle fixe pour chaque ligne
-          const angle = userData.angle;
-          const radius = userData.radius;
-          
-          // Point central de convergence (origine visuelle du tunnel)
-          const convergenceZ = -140; // Point de convergence en Z plus profond
-          
-          // Taille du trou central (rayon minimum pour toutes les lignes)
-          const centralHoleRadius = 15;
-          
-          // Facteur d'échelle basé sur la distance au point de convergence - rendu plus constant
-          const distanceToConvergence = Math.abs(userData.z - convergenceZ);
-          const scaleFactor = Math.min(1, distanceToConvergence / 180);
-          
-          // Début de la ligne - point le plus proche du joueur
-          const startRadius = Math.max(
-            centralHoleRadius,
-            radius * scaleFactor
-          );
-          
-          // Premier point - près du joueur
-          positions.push(new THREE.Vector3(
-            Math.cos(angle) * startRadius,
-            Math.sin(angle) * startRadius,
-            userData.z
-          ));
-          
-          // Second point - au loin, pour garantir une ligne parfaitement droite
-          positions.push(new THREE.Vector3(
-            Math.cos(angle) * startRadius * 0.65, // Léger rétrécissement pour l'effet de convergence
-            Math.sin(angle) * startRadius * 0.65, // Léger rétrécissement pour l'effet de convergence
-            userData.z - lineLength
-          ));
-          
-          // Mise à jour de la géométrie
-          lineGeometry.setFromPoints(positions);
-          
-          // Ajuster l'opacité et l'intensité pour un effet ULTRA BRILLANT
+        
+        // Incrémenter le compteur de durée de vie
+        userData.lifetime += deltaTime;
+        
+        // Mise à jour de la position Z - plus simple
+        userData.z += userData.speed * deltaTime * 3.0;
+        line.position.z = userData.z;
+        
+        // Réduire la fréquence des mises à jour de géométrie
+        if (shouldUpdateGeometry) {
+          // Ajuster l'opacité et l'intensité
           const material = line.material as THREE.LineBasicMaterial;
+          const distanceFromCenter = Math.abs(userData.z);
+          const intensityFactor = Math.min(0.3, 0.3 * (distanceFromCenter / 100));
           
-          // Facteur d'intensité réduit pour un effet moins éblouissant
-          const intensityFactor = Math.max(0, Math.min(0.7, (userData.z + 200) / 450)); // Réduction du facteur max
+          material.opacity = 0.5 * (1 + distanceFromCenter / 200);
           
-          // Pulsation d'opacité plus subtile
-          const pulse = 0.7 + 0.1 * Math.sin(performance.now() * 0.002 + userData.animationOffset);
-          
-          // Opacité réduite pour un effet moins éblouissant
-          material.opacity = 0.85;
-          
-          // Couleur de base pour les variations
+          // Couleur de base avec un boost de luminosité plus conservateur
+          const brightnessBoost = 1.0 + intensityFactor * 0.3;
           const baseColor = userData.baseColor;
-          
-          // Luminosité réduite pour un effet moins brillant
-          const brightnessBoost = 1.3 + intensityFactor * 0.8; // Valeurs plus faibles
-          
-          // Appliquer une brillance plus douce à la couleur de base
+
+          // Appliquer la brillance à la couleur
           material.color.setRGB(
-            Math.min(0.9, baseColor.r * brightnessBoost),
-            Math.min(0.9, baseColor.g * brightnessBoost),
-            Math.min(0.9, baseColor.b * brightnessBoost)
+            Math.min(0.7, baseColor.r * brightnessBoost),
+            Math.min(0.7, baseColor.g * brightnessBoost),
+            Math.min(0.7, baseColor.b * brightnessBoost)
           );
+          // Couleur de base
           
-          // Continuer à utiliser AdditiveBlending mais avec une intensité réduite
-          material.blending = THREE.AdditiveBlending;
-          // Réduire l'opacité des lignes plus éloignées
-          if (userData.z < -100) {
-            material.opacity *= 0.7; // Encore moins visible en profondeur
-          }
+          // Appliquer la brillance à la couleur
+        
+        }
+        
+        // Réinitialiser la ligne uniquement quand nécessaire
+        if (userData.z > 120 || userData.lifetime > userData.maxLifetime) {
+          // Réinitialiser position
+          userData.z = -160 - Math.random() * 50;
+          line.position.z = userData.z;
+          userData.lifetime = 0;
           
-          // Réinitialiser la ligne quand elle sort du champ de vision ou a atteint sa durée de vie maximale
-          if (userData.z > 120 || userData.lifetime > userData.maxLifetime) {
-            // Position plus éloignée pour un meilleur effet de perspective
-            userData.z = -160 - Math.random() * 90; // Distance entre 160 et 250 units
-            userData.lifetime = 0;
-            
-            // Distribution uniforme des angles pour remplir tout l'espace autour du trou central
-            userData.angle = Math.random() * Math.PI * 2;
-            
-            // Taille du trou central (rayon minimum pour toutes les lignes)
-            const centralHoleRadius = 15;
-            
-            // Rayon de départ basé sur la distance - les lignes plus éloignées ont un rayon plus grand
-            // pour créer l'effet de perspective
-            const maxRadius = 40; // Radius maximum
-            userData.radius = centralHoleRadius + Math.random() * (maxRadius - centralHoleRadius);
-            
-            // Vitesse variable pour plus de dynamisme 
-            userData.speed = 35 + Math.random() * 30;
-            
-            // Autres paramètres d'animation
-            userData.animationOffset = Math.random() * Math.PI * 2;
-            userData.maxLifetime = 2 + Math.random() * 3;
-            
-            // Palette de couleurs limitée à blanc et bleu pour l'effet hypervitesse
+          // Réinitialiser angle et rayon
+          userData.angle = Math.random() * Math.PI * 2;
+          userData.radius = centralHoleRadius + Math.random() * 25; // Toujours respecter le trou central
+          
+          // Créer de nouveaux points pour éviter les artefacts au centre
+          const newPoints = [
+            new THREE.Vector3(
+              Math.cos(userData.angle) * userData.radius,
+              Math.sin(userData.angle) * userData.radius,
+              0
+            ),
+            new THREE.Vector3(
+              Math.cos(userData.angle) * (userData.radius * 0.8),  // Légère convergence
+              Math.sin(userData.angle) * (userData.radius * 0.8),
+              -25
+            )
+          ];
+          
+          // Mettre à jour la géométrie
+          const lineGeometry = line.geometry as THREE.BufferGeometry;
+          lineGeometry.setFromPoints(newPoints);
+          
+          // Vitesse variable
+          userData.speed = 40 + Math.random() * 30;
+          userData.maxLifetime = 3 + Math.random() * 2;
+          
+          // Nouvelle couleur (seulement lors des réinitialisations)
+          if (shouldUpdateGeometry) {
             const whiteBlueColors = [
-              // Palette blanc et bleu uniquement
-              new THREE.Color(0xffffff), // Blanc pur (dominant - 60%)
-              new THREE.Color(0xf8f9ff), // Blanc légèrement bleu
-              new THREE.Color(0xdcf0ff), // Bleu très clair
-              new THREE.Color(0xc0e8ff), // Bleu ciel clair
-              new THREE.Color(0x99ccff), // Bleu ciel
-              new THREE.Color(0x4d94ff)  // Bleu moyen
+              new THREE.Color(0xffffff),
+              new THREE.Color(0xf8f9ff),
+              new THREE.Color(0xc0e8ff)
             ];
             
-            // Favoriser les teintes blanches (60%)
-            let colorIndex;
-            const colorRoll = Math.random();
-            if (colorRoll < 0.6) {
-              colorIndex = 0; // Blanc pur
-            } else if (colorRoll < 0.75) {
-              colorIndex = 1; // Blanc bleuté
-            } else {
-              colorIndex = 2 + Math.floor(Math.random() * 4); // Une des teintes bleues
-            }
-            
+            const colorIndex = Math.random() < 0.6 ? 0 : (Math.random() < 0.8 ? 1 : 2);
             const newColor = whiteBlueColors[colorIndex];
+            const material = line.material as THREE.LineBasicMaterial;
             material.color = newColor;
             userData.baseColor = newColor.clone();
           }
