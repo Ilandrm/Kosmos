@@ -16,7 +16,7 @@ const gameSequence = [
 const gameInstructions = {
   'asteroid-dodge-3d': {
     title: "Évitement d'Astéroïdes",
-    players: "1 joueurs",
+    players: "1 joueur",
     time: "30 secondes",
     instruction: "Vous débutez une course interstellaire, évitez les astéroïdes et atteignez le K"
   },
@@ -28,7 +28,7 @@ const gameInstructions = {
   },
   'space-hangman': {
     title: "Pendu Spatial",
-    players: "1 joueurs",
+    players: "1 joueur",
     time: "60 secondes",
     instruction: "Devinez le mot en utilisant les lettres à votre disposition"
   },
@@ -40,7 +40,7 @@ const gameInstructions = {
   },
   'koesio-quiz': {
     title: "Quiz Spatial",
-    players: "1 joueurs",
+    players: "1 joueur",
     time: "60 secondes",
     instruction: "Donnez la bonne réponse parmi les 4 propositions"
   },

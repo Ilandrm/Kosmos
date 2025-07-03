@@ -95,7 +95,7 @@ export default defineComponent({
     const showInstructions = ref(true);
     const gameInstructions = ref({
       title: 'Pendu Spatial',
-      players: '1 joueurs',
+      players: '1 joueur',
       time: '30 secondes',
       instruction: 'Devinez le mot en utilisant les lettres à votre disposition'
     });

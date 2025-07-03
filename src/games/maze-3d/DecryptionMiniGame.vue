@@ -122,7 +122,7 @@ export default defineComponent({
         isCorrect.value = true;
         message.value = "Bravo ! Vous avez déchiffré le message.";
       } else {
-        message.value = "Ce n'est pas la bonne réponse. Essayez encore !";
+        message.value = "Mauvaise réponse, pensez à la clé de décalage et réessayez à nouveau !";
       }
     };
     

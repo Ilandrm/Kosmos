@@ -126,7 +126,7 @@ const timeRemaining = ref(0)
 const showInstructions = ref(true)
 const gameInstructions =  {
   title: "Quizz",
-  players: "1 joueurs",
+  players: "1 joueur",
   time: "50 secondes",
   instruction: "Donnez la bonne réponse parmi les 4 propositions"
 }
